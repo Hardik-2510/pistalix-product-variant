@@ -78,8 +78,13 @@ export default function StorefrontPreview({ elements = [], settings = {} }) {
     let total = 0;
     visibleElements.forEach(el => {
        const val = previewValues[el.id];
-       if (!val) return;
+       if (val === undefined || val === null || val === "") return;
        const config = el.config || {};
+       
+       if (["Text", "Textarea", "Email", "Phone", "Number"].includes(el.type) && config.price) {
+           if (typeof val === "string" && val.trim() !== "") total += Number(config.price);
+           else if (typeof val === "number") total += Number(config.price);
+       }
        
        // Handle global add on value (like switch)
        if (config.addOnValueOn && val === "true") {
@@ -88,9 +93,10 @@ export default function StorefrontPreview({ elements = [], settings = {} }) {
        
        // Handle choice options add on value
        const checkChoice = (v) => {
-         const opt = (config.options || []).find(o => o.value === v) || 
+         const opt = (config.choices || []).find(o => o.value === v || o.label === v || o.id === v) || 
+                     (config.options || []).find(o => o.value === v) || 
                      (config.swatches || []).find(s => s.value === v || s.label === v);
-         if (opt && opt.addOnValue) total += Number(opt.addOnValue);
+         if (opt && (opt.price || opt.addOnValue)) total += Number(opt.price || opt.addOnValue);
        };
 
        if (Array.isArray(val)) {
@@ -175,24 +181,30 @@ export default function StorefrontPreview({ elements = [], settings = {} }) {
                 <>
                   <Divider />
                   <Box paddingBlockStart="400">
-                    <InlineStack wrap gap="400">
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px' }}>
                       {visibleElements.map((el) => {
-                        const width = el.config?.width || "100%";
-                        const calculatedWidth = width.includes("%") && width !== "100%" 
-                          ? `calc(${width} - 8px)` 
-                          : width;
+                        const width = el.config?.columnWidth || "100%";
+                        let flexBasis = width;
+                        if (width === '50%') flexBasis = 'calc(50% - 8px)';
+                        else if (width === '33%') flexBasis = 'calc(33.333% - 10.66px)';
+                        else if (width === '25%') flexBasis = 'calc(25% - 12px)';
+                        else if (width.includes('%') && width !== '100%') flexBasis = `calc(${width} - 16px)`;
                           
                         return (
-                          <Box key={el.id} width={calculatedWidth}>
+                          <div key={el.id} style={{ 
+                            flex: `0 0 ${flexBasis}`, 
+                            maxWidth: flexBasis, 
+                            boxSizing: 'border-box'
+                          }}>
                             <ElementRenderer 
                               element={el} 
                               value={previewValues[el.id]} 
                               onChange={(val) => handleValueChange(el.id, val)}
                             />
-                          </Box>
+                          </div>
                         );
                       })}
-                    </InlineStack>
+                    </div>
                   </Box>
                 </>
               ) : (

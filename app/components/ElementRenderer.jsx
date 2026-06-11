@@ -30,12 +30,37 @@ export default function ElementRenderer({ element, value, onChange }) {
        const defOpt = optionsList[defIndex];
        return defOpt.id || defOpt.value || defOpt.label || String(defIndex);
     }
+    if (["text", "textarea", "number", "email", "phone"].includes(typeStr) && config.defaultValue) {
+      return config.defaultValue;
+    }
     return "";
   };
 
   const activeValue = getDefaultValue();
 
-  const handleTextChange = (v) => onChange && onChange(v);
+  const handleTextChange = (v) => {
+    let newVal = v;
+    
+    // Apply allowedValue filter
+    if (config.allowedValue === "Letters") {
+      newVal = newVal.replace(/[^a-zA-Z\s]/g, "");
+    } else if (config.allowedValue === "Letters & numbers") {
+      newVal = newVal.replace(/[^a-zA-Z0-9\s]/g, "");
+    }
+
+    // Apply textTransform
+    if (config.textTransform === "Uppercase") {
+      newVal = newVal.toUpperCase();
+    } else if (config.textTransform === "Lowercase") {
+      newVal = newVal.toLowerCase();
+    } else if (config.textTransform === "Capitalize") {
+      // Basic capitalization: first letter of each word
+      newVal = newVal.replace(/\b\w/g, (c) => c.toUpperCase());
+    }
+
+    onChange && onChange(newVal);
+  };
+
   const handleSelectChange = (v) => onChange && onChange(v);
   const handleChoiceChange = (v) => onChange && onChange(v);
 
@@ -114,20 +139,38 @@ export default function ElementRenderer({ element, value, onChange }) {
 
       const isTextLike = ["text", "email", "phone"].includes(typeStr);
       const currentLength = (value || "").length;
-      const maxL = config.maxLength;
-      const showCount = isTextLike && (config.showCharacterCounter || maxL);
+      const maxL = config.maxCharacter;
+      const showCount = isTextLike && (config.characterCounter || maxL);
       const charCountText = maxL ? `${currentLength}/${maxL} characters` : `${currentLength} characters`;
+
+      const renderLabel = () => {
+        const textLabel = `${label}${getAddOnText(config)}`;
+        if (config.helpText && config.helpTextPosition === "Tooltip") {
+          return (
+            <InlineStack gap="100" blockAlign="center">
+              <Text as="span">{textLabel}</Text>
+              <Tooltip content={config.helpText}>
+                <Text as="span" tone="subdued" cursor="help">ⓘ</Text>
+              </Tooltip>
+            </InlineStack>
+          );
+        }
+        return textLabel;
+      };
 
       return (
         <Box>
           <TextField
-            label={`${label}${getAddOnText(config)}`}
+            label={renderLabel()}
             type={typeStr === "number" ? "number" : typeStr === "email" ? "email" : typeStr === "phone" ? "tel" : "text"}
             placeholder={config.placeholder || ""}
             value={value || ""}
             onChange={handleTextChange}
             autoComplete="off"
             maxLength={isTextLike && maxL ? maxL : undefined}
+            prefix={config.prefixType === "Text" && config.prefixText ? config.prefixText : undefined}
+            suffix={config.suffix ? config.suffix : undefined}
+            helpText={config.helpText && config.helpTextPosition !== "Tooltip" ? config.helpText : undefined}
           />
           {showCount && (
             <div style={{ textAlign: "right", color: "var(--p-color-text-subdued)", fontSize: "13px", marginTop: "4px" }}>
@@ -140,20 +183,36 @@ export default function ElementRenderer({ element, value, onChange }) {
 
     case "textarea": {
       const currentLength = (value || "").length;
-      const maxL = config.maxLength;
-      const showCount = config.showCharacterCounter || maxL;
+      const maxL = config.maxCharacter;
+      const showCount = config.characterCounter || maxL;
       const charCountText = maxL ? `${currentLength}/${maxL} characters` : `${currentLength} characters`;
+
+      const renderLabel = () => {
+        const textLabel = `${label}${getAddOnText(config)}`;
+        if (config.helpText && config.helpTextPosition === "Tooltip") {
+          return (
+            <InlineStack gap="100" blockAlign="center">
+              <Text as="span">{textLabel}</Text>
+              <Tooltip content={config.helpText}>
+                <Text as="span" tone="subdued" cursor="help">ⓘ</Text>
+              </Tooltip>
+            </InlineStack>
+          );
+        }
+        return textLabel;
+      };
 
       return (
         <Box>
           <TextField
-            label={`${label}${getAddOnText(config)}`}
+            label={renderLabel()}
             placeholder={config.placeholder || ""}
             value={value || ""}
             onChange={handleTextChange}
             autoComplete="off"
             multiline={3}
             maxLength={maxL ? maxL : undefined}
+            helpText={config.helpText && config.helpTextPosition !== "Tooltip" ? config.helpText : undefined}
           />
           {showCount && (
             <div style={{ textAlign: "right", color: "var(--p-color-text-subdued)", fontSize: "13px", marginTop: "4px" }}>

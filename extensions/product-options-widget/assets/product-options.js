@@ -117,6 +117,16 @@ function parseConfig(configVal) {
   try { return JSON.parse(configVal); } catch (e) { return {}; }
 }
 
+function escapeHTML(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function getChoices(config) {
   return config.choices || config.options || config.swatches || [];
 }
@@ -223,6 +233,18 @@ function updateTotalPrice() {
 
     var p = parseInt(input.getAttribute('data-price') || '0', 10);
     totalAddonCents += p;
+  });
+
+  // Text, Textarea, Number, Email, Phone
+  var textInputs = document.querySelectorAll('.cap-options-wrapper input[type="text"], .cap-options-wrapper input[type="email"], .cap-options-wrapper input[type="tel"], .cap-options-wrapper input[type="number"], .cap-options-wrapper textarea');
+  textInputs.forEach(function(input) {
+    var group = input.closest('.cap-option-group');
+    if (group && group.style.display === 'none') return;
+
+    if (input.value && input.value.trim() !== '') {
+      var p = parseInt(input.getAttribute('data-price') || '0', 10);
+      totalAddonCents += p;
+    }
   });
 
   // Swatches (Button, Color, Image)
@@ -409,7 +431,19 @@ function renderTemplate(template, container) {
     else if (typeLower === 'switch') elDOM = renderSwitch(element);
     else elDOM = null;
 
-    if (elDOM) wrapper.appendChild(elDOM);
+    if (elDOM) {
+      var config = typeof element.config === 'string' ? JSON.parse(element.config) : (element.config || {});
+      var width = config.columnWidth || '100%';
+      var flexBasis = width;
+      if (width === '50%') flexBasis = 'calc(50% - 8px)';
+      else if (width === '33%') flexBasis = 'calc(33.333% - 10.66px)';
+      else if (width === '25%') flexBasis = 'calc(25% - 12px)';
+      else if (width.indexOf('%') > -1 && width !== '100%') flexBasis = 'calc(' + width + ' - 16px)';
+      
+      elDOM.style.setProperty('flex', '0 0 ' + flexBasis, 'important');
+      elDOM.style.setProperty('max-width', flexBasis, 'important');
+      wrapper.appendChild(elDOM);
+    }
   });
 
   var trackInput = document.createElement('input');
@@ -448,7 +482,8 @@ function applyDynamicStyles(wrapper, container) {
   var css = '';
 
   // General
-  css += '.cap-options-wrapper { text-align: ' + alignment + ' !important; background-color: ' + (colors.appBackground || 'transparent') + ' !important; }\n';
+  css += '.cap-options-wrapper { display: flex !important; flex-wrap: wrap !important; gap: 16px !important; margin: 0 !important; text-align: ' + alignment + ' !important; background-color: ' + (colors.appBackground || 'transparent') + ' !important; }\n';
+  css += '.cap-options-wrapper .cap-option-group { box-sizing: border-box !important; padding: 0 !important; margin: 0 !important; flex-shrink: 0 !important; border: none !important; }\n';
   css += '.cap-options-wrapper .cap-label { color: ' + (colors.labelText || '#111827') + ' !important; }\n';
   css += '.cap-options-wrapper .cap-required { color: ' + (colors.requiredCharacter || 'red') + ' !important; }\n';
   css += '.cap-options-wrapper .cap-help-text { color: ' + (colors.helpText || '#666') + ' !important; }\n';
@@ -456,7 +491,7 @@ function applyDynamicStyles(wrapper, container) {
   css += '.cap-options-wrapper .cap-addon-total-message span { color: ' + (colors.totalTextMoney || '#008000') + ' !important; }\n';
 
   // Single Input
-  css += '.cap-options-wrapper .cap-input { color: ' + (colors.inputText || '#111827') + ' !important; border-color: ' + (colors.inputBorder || '#d1d5db') + ' !important; background-color: ' + (colors.inputBackground || '#ffffff') + ' !important; }\n';
+  css += '.cap-options-wrapper .cap-input { width: 100% !important; max-width: 100% !important; box-sizing: border-box !important; padding: 8px 12px !important; border-width: 1px !important; border-style: solid !important; border-radius: 4px !important; color: ' + (colors.inputText || '#111827') + ' !important; border-color: ' + (colors.inputBorder || '#d1d5db') + ' !important; background-color: ' + (colors.inputBackground || '#ffffff') + ' !important; }\n';
   css += '.cap-options-wrapper .cap-switch-track { background-color: ' + (colors.switchBackground || '#dddddd') + ' !important; }\n';
   css += '.cap-options-wrapper input:checked + .cap-switch-track { background-color: ' + (colors.switchActiveBackground || '#ea1255') + ' !important; }\n';
 
@@ -465,6 +500,7 @@ function applyDynamicStyles(wrapper, container) {
   var ddBorder = colors.dropdownBorder || colors.inputBorder || '#d1d5db';
   var ddBg = colors.dropdownBackground || colors.inputBackground || '#ffffff';
   var ddSel = colors.dropdownSelected || '#f8e0e6';
+  css += '.cap-options-wrapper .cap-select, .cap-options-wrapper .cap-image-dropdown-selected, .cap-options-wrapper .cap-color-dropdown-selected { width: 100% !important; max-width: 100% !important; box-sizing: border-box !important; padding: 8px 12px !important; border-width: 1px !important; border-style: solid !important; border-radius: 4px !important; }\n';
   css += '.cap-options-wrapper .cap-select, .cap-options-wrapper .cap-image-dropdown-selected, .cap-options-wrapper .cap-color-dropdown-selected, .cap-options-wrapper .cap-image-dropdown-item, .cap-options-wrapper .cap-color-dropdown-item { color: ' + ddText + ' !important; background-color: ' + ddBg + ' !important; }\n';
   css += '.cap-options-wrapper .cap-select, .cap-options-wrapper .cap-image-dropdown-selected, .cap-options-wrapper .cap-color-dropdown-selected, .cap-options-wrapper .cap-image-dropdown-list, .cap-options-wrapper .cap-color-dropdown-list { border-color: ' + ddBorder + ' !important; }\n';
   css += '.cap-options-wrapper .cap-image-dropdown-item:hover, .cap-options-wrapper .cap-color-dropdown-item:hover { background-color: ' + ddSel + ' !important; }\n';
@@ -820,7 +856,94 @@ function renderText(element) {
   input.name = propName(element.label);
   input.className = 'cap-input';
   if (config.placeholder) input.placeholder = config.placeholder;
-  group.appendChild(input);
+  if (config.defaultValue) input.value = config.defaultValue;
+  if (config.maxCharacter) input.maxLength = parseInt(config.maxCharacter, 10);
+  if (config.minCharacter) input.minLength = parseInt(config.minCharacter, 10);
+
+  // Apply textTransform
+  if (config.textTransform === "Uppercase") {
+    input.style.textTransform = "uppercase";
+  } else if (config.textTransform === "Lowercase") {
+    input.style.textTransform = "lowercase";
+  } else if (config.textTransform === "Capitalize") {
+    input.style.textTransform = "capitalize";
+  }
+
+  // Apply allowedValue
+  if (config.allowedValue === "Letters" || config.allowedValue === "Letters & numbers") {
+    input.addEventListener('input', function() {
+      var regex = config.allowedValue === "Letters" ? /[^a-zA-Z\s]/g : /[^a-zA-Z0-9\s]/g;
+      var newVal = this.value.replace(regex, "");
+      if (newVal !== this.value) {
+        this.value = newVal;
+      }
+    });
+  }
+
+  // HelpText Tooltip overrides default HelpText
+  if (config.helpText && config.helpTextPosition === "Tooltip") {
+    var label = group.querySelector('.cap-label');
+    if (label) {
+      label.innerHTML += ' <span style="cursor:help; color:var(--p-color-text-subdued, #666);" title="' + escapeHTML(config.helpText) + '">ⓘ</span>';
+    }
+    var existingHelp = group.querySelector('.cap-help-text');
+    if (existingHelp) existingHelp.style.display = 'none';
+  }
+
+  var p = parseFloat(config.price);
+  if (!isNaN(p) && p > 0) {
+    input.setAttribute('data-price', Math.round(p * 100));
+  }
+
+  // Prefix / Suffix wrapper
+  if ((config.prefixType === "Text" && config.prefixText) || config.suffix) {
+    var wrapper = document.createElement('div');
+    wrapper.style.display = 'flex';
+    wrapper.style.alignItems = 'center';
+    
+    if (config.prefixType === "Text" && config.prefixText) {
+      var prefix = document.createElement('span');
+      prefix.textContent = config.prefixText;
+      prefix.style.paddingRight = '8px';
+      prefix.style.color = 'var(--p-color-text-subdued, #666)';
+      wrapper.appendChild(prefix);
+    }
+    
+    input.style.flex = '1';
+    wrapper.appendChild(input);
+
+    if (config.suffix) {
+      var suffix = document.createElement('span');
+      suffix.textContent = config.suffix;
+      suffix.style.paddingLeft = '8px';
+      suffix.style.color = 'var(--p-color-text-subdued, #666)';
+      wrapper.appendChild(suffix);
+    }
+    
+    group.appendChild(wrapper);
+  } else {
+    group.appendChild(input);
+  }
+
+  var maxL = config.maxCharacter;
+  var showCount = config.characterCounter || maxL;
+  if (showCount) {
+    var counter = document.createElement('div');
+    counter.className = 'cap-character-counter';
+    counter.style.textAlign = 'right';
+    counter.style.color = 'var(--p-color-text-subdued, #666)';
+    counter.style.fontSize = '13px';
+    counter.style.marginTop = '4px';
+    
+    var updateCounter = function() {
+      var len = input.value.length;
+      counter.textContent = maxL ? len + '/' + maxL + ' characters' : len + ' characters';
+    };
+    updateCounter();
+    input.addEventListener('input', updateCounter);
+    group.appendChild(counter);
+  }
+
   group.appendChild(createErrorMsg());
   return group;
 }
@@ -833,7 +956,96 @@ function renderTextarea(element) {
   textarea.className = 'cap-input';
   textarea.rows = 4;
   if (config.placeholder) textarea.placeholder = config.placeholder;
-  group.appendChild(textarea);
+  if (config.defaultValue) textarea.value = config.defaultValue;
+  if (config.maxCharacter) textarea.maxLength = parseInt(config.maxCharacter, 10);
+  if (config.minCharacter) textarea.minLength = parseInt(config.minCharacter, 10);
+
+  // Apply textTransform
+  if (config.textTransform === "Uppercase") {
+    textarea.style.textTransform = "uppercase";
+  } else if (config.textTransform === "Lowercase") {
+    textarea.style.textTransform = "lowercase";
+  } else if (config.textTransform === "Capitalize") {
+    textarea.style.textTransform = "capitalize";
+  }
+
+  // Apply allowedValue
+  if (config.allowedValue === "Letters" || config.allowedValue === "Letters & numbers") {
+    textarea.addEventListener('input', function() {
+      var regex = config.allowedValue === "Letters" ? /[^a-zA-Z\s]/g : /[^a-zA-Z0-9\s]/g;
+      var newVal = this.value.replace(regex, "");
+      if (newVal !== this.value) {
+        this.value = newVal;
+      }
+    });
+  }
+
+  // HelpText Tooltip overrides default HelpText
+  if (config.helpText && config.helpTextPosition === "Tooltip") {
+    var label = group.querySelector('.cap-label');
+    if (label) {
+      label.innerHTML += ' <span style="cursor:help; color:var(--p-color-text-subdued, #666);" title="' + escapeHTML(config.helpText) + '">ⓘ</span>';
+    }
+    var existingHelp = group.querySelector('.cap-help-text');
+    if (existingHelp) existingHelp.style.display = 'none';
+  }
+
+  var p = parseFloat(config.price);
+  if (!isNaN(p) && p > 0) {
+    textarea.setAttribute('data-price', Math.round(p * 100));
+  }
+
+  // Prefix / Suffix wrapper
+  if ((config.prefixType === "Text" && config.prefixText) || config.suffix) {
+    var wrapper = document.createElement('div');
+    wrapper.style.display = 'flex';
+    wrapper.style.alignItems = 'flex-start';
+    
+    if (config.prefixType === "Text" && config.prefixText) {
+      var prefix = document.createElement('span');
+      prefix.textContent = config.prefixText;
+      prefix.style.paddingRight = '8px';
+      prefix.style.paddingTop = '8px';
+      prefix.style.color = 'var(--p-color-text-subdued, #666)';
+      wrapper.appendChild(prefix);
+    }
+    
+    textarea.style.flex = '1';
+    wrapper.appendChild(textarea);
+
+    if (config.suffix) {
+      var suffix = document.createElement('span');
+      suffix.textContent = config.suffix;
+      suffix.style.paddingLeft = '8px';
+      suffix.style.paddingTop = '8px';
+      suffix.style.color = 'var(--p-color-text-subdued, #666)';
+      wrapper.appendChild(suffix);
+    }
+    
+    group.appendChild(wrapper);
+  } else {
+    group.appendChild(textarea);
+  }
+
+  var maxL = config.maxCharacter;
+  var showCount = config.characterCounter || maxL;
+  if (showCount) {
+    var counter = document.createElement('div');
+    counter.className = 'cap-character-counter';
+    counter.style.textAlign = 'right';
+    counter.style.color = 'var(--p-color-text-subdued, #666)';
+    counter.style.fontSize = '13px';
+    counter.style.marginTop = '4px';
+    
+    var updateCounter = function() {
+      var len = textarea.value.length;
+      counter.textContent = maxL ? len + '/' + maxL + ' characters' : len + ' characters';
+    };
+    updateCounter();
+    textarea.addEventListener('input', updateCounter);
+    group.appendChild(counter);
+  }
+
   group.appendChild(createErrorMsg());
   return group;
 }
@@ -846,7 +1058,53 @@ function renderNumber(element) {
   input.name = propName(element.label);
   input.className = 'cap-input';
   if (config.placeholder) input.placeholder = config.placeholder;
-  group.appendChild(input);
+  if (config.defaultValue) input.value = config.defaultValue;
+  
+  var p = parseFloat(config.price);
+  if (!isNaN(p) && p > 0) {
+    input.setAttribute('data-price', Math.round(p * 100));
+  }
+
+  // HelpText Tooltip overrides default HelpText
+  if (config.helpText && config.helpTextPosition === "Tooltip") {
+    var label = group.querySelector('.cap-label');
+    if (label) {
+      label.innerHTML += ' <span style="cursor:help; color:var(--p-color-text-subdued, #666);" title="' + escapeHTML(config.helpText) + '">ⓘ</span>';
+    }
+    var existingHelp = group.querySelector('.cap-help-text');
+    if (existingHelp) existingHelp.style.display = 'none';
+  }
+
+  // Prefix / Suffix wrapper
+  if ((config.prefixType === "Text" && config.prefixText) || config.suffix) {
+    var wrapper = document.createElement('div');
+    wrapper.style.display = 'flex';
+    wrapper.style.alignItems = 'center';
+    
+    if (config.prefixType === "Text" && config.prefixText) {
+      var prefix = document.createElement('span');
+      prefix.textContent = config.prefixText;
+      prefix.style.paddingRight = '8px';
+      prefix.style.color = 'var(--p-color-text-subdued, #666)';
+      wrapper.appendChild(prefix);
+    }
+    
+    input.style.flex = '1';
+    wrapper.appendChild(input);
+
+    if (config.suffix) {
+      var suffix = document.createElement('span');
+      suffix.textContent = config.suffix;
+      suffix.style.paddingLeft = '8px';
+      suffix.style.color = 'var(--p-color-text-subdued, #666)';
+      wrapper.appendChild(suffix);
+    }
+    
+    group.appendChild(wrapper);
+  } else {
+    group.appendChild(input);
+  }
+
   group.appendChild(createErrorMsg());
   return group;
 }
