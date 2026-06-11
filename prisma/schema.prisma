@@ -1,0 +1,102 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Note that some adapters may set a maximum length for the String type by default, please ensure your strings are long
+// enough when changing adapters.
+// See https://www.prisma.io/docs/orm/reference/prisma-schema-reference#string for more information
+datasource db {
+  provider = "sqlite"
+  url      = "file:dev.sqlite"
+}
+
+model Session {
+  id            String    @id
+  shop          String
+  state         String
+  isOnline      Boolean   @default(false)
+  scope         String?
+  expires       DateTime?
+  accessToken   String
+  userId        BigInt?
+  firstName     String?
+  lastName      String?
+  email         String?
+  accountOwner  Boolean   @default(false)
+  locale        String?
+  collaborator  Boolean?  @default(false)
+  emailVerified Boolean?  @default(false)
+  refreshToken        String?
+  refreshTokenExpires DateTime?
+}
+
+model Shop {
+  id          String   @id @default(cuid())
+  shopDomain  String   @unique
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  optionSets  OptionSet[]
+}
+
+model OptionSet {
+  id          String   @id @default(cuid())
+  shopId      String
+  name        String
+  status      String   @default("ACTIVE") // ACTIVE, DRAFT
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  shop        Shop          @relation(fields: [shopId], references: [shopDomain], onDelete: Cascade)
+  sections    Section[]
+  elements    Element[]
+  productRules ProductRule[]
+
+  @@index([shopId])
+}
+
+model Section {
+  id          String   @id @default(cuid())
+  optionSetId String
+  title       String?
+  order       Int      @default(0)
+  visible     Boolean  @default(true)
+  styles      String?  // SQLite doesn't natively support JSON as a distinct column type with Prisma, using String to store JSON.
+
+  optionSet   OptionSet @relation(fields: [optionSetId], references: [id], onDelete: Cascade)
+  elements    Element[]
+
+  @@index([optionSetId])
+}
+
+model Element {
+  id          String   @id @default(cuid())
+  optionSetId String
+  sectionId   String
+  type        String   
+  label       String
+  subtext     String?
+  required    Boolean  @default(false)
+  order       Int      @default(0)
+  config      String   @default("{}") // SQLite doesn't natively support JSON, using String
+
+  optionSet   OptionSet @relation(fields: [optionSetId], references: [id], onDelete: Cascade)
+  section     Section   @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  @@index([optionSetId])
+  @@index([sectionId])
+}
+
+model ProductRule {
+  id             String    @id @default(cuid())
+  optionSetId    String
+  targetType     String    
+  targetValues   String    @default("[]") // SQLite doesn't natively support JSON, using String
+
+  optionSet      OptionSet @relation(fields: [optionSetId], references: [id], onDelete: Cascade)
+
+  @@index([optionSetId])
+}

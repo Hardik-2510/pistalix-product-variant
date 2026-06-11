@@ -1,0 +1,401 @@
+/* ═══════════════════════════════════════════════════════════════════
+   Pistalix Globo — Product Options Widget Stylesheet
+
+   ISOLATION STRATEGY: Universal "all: revert" reset on the wrapper.
+   This forces every element inside .cap-options-wrapper back to the
+   browser's built-in default stylesheet, ignoring ALL theme CSS.
+   Future template elements (any type) will automatically be protected.
+   We then add only our own styles on top.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ─── Step 1: Kill ALL inherited theme styles on the container ─── */
+.cap-options-wrapper {
+  all: revert;
+  /* Now re-add only what we need for the wrapper itself */
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin: 20px 0;
+  position: relative;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 14px;
+  color: #111827;
+  box-sizing: border-box;
+}
+
+/* ─── Step 2: Revert every child element to browser defaults ──── */
+/* This covers ANY element type added to templates now or in the future */
+.cap-options-wrapper * {
+  all: revert;
+  box-sizing: border-box;
+}
+
+/* ─── Step 3: Our widget styles — applied on top of clean slate ─ */
+
+.cap-options-wrapper .cap-option-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+}
+
+.cap-options-wrapper .cap-label {
+  display: inline-block;
+  font-weight: 600;
+  font-size: 14px;
+  margin: 0;
+  padding: 0;
+  color: #111827;
+}
+
+.cap-options-wrapper .cap-required {
+  color: red;
+  margin-left: 2px;
+}
+
+.cap-options-wrapper .cap-help-text {
+  font-size: 12px;
+  color: #666;
+  display: block;
+  margin: 0;
+  padding: 0;
+}
+
+.cap-options-wrapper .cap-error {
+  color: red;
+  font-size: 12px;
+  display: none;
+  margin: 0;
+}
+
+.cap-options-wrapper .cap-error.visible {
+  display: block;
+}
+
+/* ─── Inputs ───────────────────────────────────────────────────── */
+.cap-options-wrapper .cap-input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 14px;
+  background: white;
+  color: #111827;
+  display: block;
+  box-sizing: border-box;
+}
+
+.cap-options-wrapper .cap-input.error,
+.cap-options-wrapper .cap-select.error,
+.cap-options-wrapper .cap-color-dropdown-selected.error,
+.cap-options-wrapper .cap-image-dropdown-selected.error {
+  border-color: red !important;
+}
+
+.cap-options-wrapper .cap-swatch-group.error,
+.cap-options-wrapper .cap-radio-group.error,
+.cap-options-wrapper .cap-checkbox-group.error {
+  border: 1px solid red !important;
+  border-radius: 6px;
+  padding: 8px;
+}
+
+.cap-options-wrapper .cap-select {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 14px;
+  background: white;
+  color: #111827;
+  display: block;
+}
+
+/* ─── Radio & Checkbox ─────────────────────────────────────────── */
+.cap-options-wrapper .cap-radio-group,
+.cap-options-wrapper .cap-checkbox-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cap-options-wrapper .cap-radio-option,
+.cap-options-wrapper .cap-checkbox-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+/* ─── Swatch Group ─────────────────────────────────────────────── */
+.cap-options-wrapper .cap-swatch-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+}
+
+/* ─── Color Swatch ─────────────────────────────────────────────── */
+.cap-options-wrapper .cap-color-swatch {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: border 0.2s;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.cap-options-wrapper .cap-color-swatch.cap-selected {
+  border-color: #000;
+}
+
+/* ─── Image Swatch ─────────────────────────────────────────────── */
+.cap-options-wrapper .cap-image-swatch {
+  width: 48px;
+  height: 48px;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 2px solid transparent;
+  object-fit: cover;
+  transition: border 0.2s;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.cap-options-wrapper .cap-image-swatch.cap-selected {
+  border-color: #000;
+}
+
+/* ─── Button Swatch ────────────────────────────────────────────── */
+.cap-options-wrapper .cap-button-swatch {
+  padding: 8px 16px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  background: white;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+}
+
+.cap-options-wrapper .cap-button-swatch:hover {
+  border-color: #9ca3af;
+}
+
+.cap-options-wrapper .cap-button-swatch.cap-selected {
+  border-color: #000;
+  background: #000;
+  color: white;
+}
+
+/* ─── Image Dropdown ───────────────────────────────────────────── */
+.cap-options-wrapper .cap-image-dropdown-select {
+  display: none;
+}
+
+.cap-options-wrapper .cap-image-dropdown-selected {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: white;
+  cursor: pointer;
+  font-size: 14px;
+  position: relative;
+  width: 100%;
+}
+
+.cap-options-wrapper .cap-image-dropdown-layout {
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+  width: 100% !important;
+}
+
+.cap-options-wrapper .cap-image-dropdown-left-preview {
+  width: 50px !important;
+  height: 50px !important;
+  border-radius: 50% !important;
+  object-fit: cover !important;
+  border: 1px solid #d1d5db !important;
+  flex-shrink: 0 !important;
+}
+
+.cap-options-wrapper .cap-image-dropdown-right-wrap {
+  position: relative !important;
+  flex-grow: 1 !important;
+  width: 100% !important;
+}
+
+.cap-options-wrapper .cap-image-dropdown-selected::after {
+  content: "▼";
+  font-size: 10px;
+  position: absolute;
+  right: 12px;
+  color: #6b7280;
+}
+
+.cap-options-wrapper .cap-image-dropdown-thumb {
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  object-fit: cover;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.cap-options-wrapper .cap-image-dropdown-list {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  background: white;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  width: 100%;
+  max-height: 300px;
+  overflow-y: auto;
+  z-index: 9999;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.cap-options-wrapper .cap-image-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: background 0.1s;
+  background: white;
+  font-size: 14px;
+}
+
+.cap-options-wrapper .cap-image-dropdown-item:hover {
+  background: #f3f4f6;
+}
+
+.cap-options-wrapper .cap-image-dropdown-option-img {
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  object-fit: cover;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+
+/* ─── Color Dropdown ───────────────────────────────────────────── */
+.cap-options-wrapper .cap-color-dropdown-select {
+  display: none;
+}
+
+.cap-options-wrapper .cap-color-dropdown-wrap {
+  position: relative !important;
+  width: 100% !important;
+}
+
+.cap-options-wrapper .cap-color-dropdown-selected {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: white;
+  cursor: pointer;
+  font-size: 14px;
+  position: relative;
+  width: 100%;
+}
+
+.cap-options-wrapper .cap-color-dropdown-selected::after {
+  content: "▼";
+  font-size: 10px;
+  position: absolute;
+  right: 12px;
+  color: #6b7280;
+}
+
+.cap-options-wrapper .cap-color-dropdown-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  border: 1px solid #d1d5db;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.cap-options-wrapper .cap-color-dropdown-list {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  background: white;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  width: 100%;
+  max-height: 300px;
+  overflow-y: auto;
+  z-index: 9999;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.cap-options-wrapper .cap-color-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: background 0.1s;
+  background: white;
+  font-size: 14px;
+}
+
+.cap-options-wrapper .cap-color-dropdown-item:hover {
+  background: #f3f4f6;
+}
+
+.cap-options-wrapper .cap-color-dropdown-option-color {
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  border: 1px solid #d1d5db;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+/* ─── Static Elements ──────────────────────────────────────────── */
+.cap-options-wrapper .cap-heading {
+  margin: 0;
+  padding: 0;
+  font-size: 18px;
+  font-weight: bold;
+}
+
+.cap-options-wrapper .cap-divider {
+  border: 0;
+  border-top: 1px solid #e5e7eb;
+  margin: 12px 0;
+  display: block;
+  height: 0;
+  background: none;
+}
+
+.cap-options-wrapper .cap-paragraph {
+  margin: 0;
+  font-size: 14px;
+  color: #4b5563;
+}
+
+/* ─── Hide dynamic checkout when options active ────────────────── */
+.shopify-payment-button {
+  display: none !important;
+}

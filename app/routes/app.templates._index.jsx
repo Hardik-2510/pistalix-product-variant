@@ -1,0 +1,439 @@
+import { useState, useCallback, useRef } from "react";
+import crypto from "crypto";
+import {
+  Tabs,
+  EmptyState,
+  InlineGrid,
+  Box,
+  Text,
+  Button,
+  InlineStack,
+  BlockStack,
+  Badge,
+  Card,
+  AppProvider,
+  Modal,
+} from "@shopify/polaris";
+import english from "@shopify/polaris/locales/en.json";
+import "@shopify/polaris/build/esm/styles.css";
+import { useNavigate, useLoaderData, useFetcher } from "react-router";
+import prisma from "../db.server";
+import { authenticate } from "../shopify.server";
+
+export const loader = async ({ request }) => {
+  const { session } = await authenticate.admin(request);
+  const optionSets = await prisma.optionSet.findMany({
+    where: { shopId: session.shop, status: "TEMPLATE" },
+    orderBy: { createdAt: "desc" },
+    include: { elements: true, sections: true }
+  });
+  return { optionSets };
+};
+
+export const action = async ({ request }) => {
+  const { session } = await authenticate.admin(request);
+  const formData = await request.formData();
+  const intent = formData.get("intent");
+  const id = formData.get("id");
+
+  if (intent === "delete" && id) {
+    await prisma.optionSet.delete({ where: { id } });
+    return { success: true };
+  }
+
+  if (intent === "import") {
+    const importData = formData.get("importData");
+    if (!importData) return new Response(JSON.stringify({ error: "No data provided" }), { status: 400 });
+
+    try {
+      const templates = JSON.parse(importData);
+      const templatesToImport = Array.isArray(templates) ? templates : [templates];
+
+      // Ensure the shop record exists before creating OptionSets to prevent Foreign Key constraint errors
+      await prisma.shop.upsert({
+        where: { shopDomain: session.shop },
+        update: {},
+        create: { shopDomain: session.shop }
+      });
+
+      for (const tpl of templatesToImport) {
+        // Remap section and element IDs for the imported template to ensure config consistency
+        const secIdMap = {};
+        if (tpl.sections) {
+          for (const sec of tpl.sections) {
+            secIdMap[sec.id] = `sec_${crypto.randomUUID().replace(/-/g, "")}`;
+          }
+        }
+
+        const elIdMap = {};
+        if (tpl.elements) {
+          for (const el of tpl.elements) {
+            elIdMap[el.id] = `el_${crypto.randomUUID().replace(/-/g, "")}`;
+          }
+        }
+
+        const createdOptionSet = await prisma.optionSet.create({
+          data: {
+            shopId: session.shop,
+            name: (tpl.name || "Untitled") + (tpl.name && tpl.name.includes("(Imported)") ? "" : " (Imported)"),
+            status: "TEMPLATE",
+            sections: {
+              create: tpl.sections?.map(sec => ({
+                id: secIdMap[sec.id],
+                title: sec.title,
+                order: sec.order ?? 0,
+                visible: sec.visible ?? true,
+                styles: typeof sec.styles === 'object' ? JSON.stringify(sec.styles) : sec.styles,
+              })) || []
+            },
+            productRules: {
+              create: [{
+                targetType: "all",
+                targetValues: "[]"
+              }]
+            }
+          },
+          include: { sections: true }
+        });
+
+        if (tpl.elements && tpl.elements.length > 0) {
+          const elementsToCreate = tpl.elements.map((e, elIdx) => {
+            const newSectionId = secIdMap[e.sectionId];
+            
+            // Process config to update mapped IDs
+            let parsedConfig = {};
+            if (typeof e.config === 'object' && e.config !== null) {
+              parsedConfig = { ...e.config };
+            } else if (typeof e.config === 'string') {
+              try { parsedConfig = JSON.parse(e.config); } catch (err) { parsedConfig = {}; }
+            }
+
+            parsedConfig.sectionId = newSectionId;
+
+            if (parsedConfig.conditions) {
+              for (const cond of parsedConfig.conditions) {
+                if (elIdMap[cond.sourceElementId]) {
+                  cond.sourceElementId = elIdMap[cond.sourceElementId];
+                }
+              }
+            }
+
+            if (parsedConfig.pushRules) {
+              for (const rule of parsedConfig.pushRules) {
+                if (elIdMap[rule.targetElementId]) {
+                  rule.targetElementId = elIdMap[rule.targetElementId];
+                }
+              }
+            }
+
+            return {
+              id: elIdMap[e.id],
+              optionSetId: createdOptionSet.id,
+              sectionId: newSectionId,
+              type: e.type || "text",
+              label: e.label || "New Element",
+              subtext: e.subtext,
+              required: e.required ?? false,
+              order: e.order ?? elIdx,
+              config: JSON.stringify(parsedConfig)
+            };
+          }).filter(e => e.sectionId);
+
+          if (elementsToCreate.length > 0) {
+            await prisma.element.createMany({ data: elementsToCreate });
+          }
+        }
+      }
+      return { success: true };
+    } catch (error) {
+      console.error("Import error:", error);
+      require('fs').writeFileSync('import-error.log', String(error) + '\n' + (error.stack || ''));
+      return new Response(JSON.stringify({ error: "Import failed" }), { status: 500 });
+    }
+  }
+
+  return new Response(JSON.stringify({ error: "Invalid action" }), { status: 400, headers: { "Content-Type": "application/json" } });
+};
+
+export default function Templates() {
+  const { optionSets } = useLoaderData();
+  const fetcher = useFetcher();
+  const fileInputRef = useRef(null);
+
+  // Download Helper
+  const downloadJSON = (data, filename) => {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const cleanTemplate = (template) => ({
+    name: template.name,
+    sections: template.sections?.map(s => ({
+      id: s.id,
+      title: s.title,
+      order: s.order,
+      visible: s.visible,
+      styles: s.styles
+    })) || [],
+    elements: template.elements?.map(e => ({
+      id: e.id,
+      sectionId: e.sectionId,
+      type: e.type,
+      label: e.label,
+      subtext: e.subtext,
+      required: e.required,
+      order: e.order,
+      config: e.config
+    })) || []
+  });
+
+  const exportTemplate = useCallback((id) => {
+    const template = optionSets.find(t => t.id === id);
+    if (template) {
+      downloadJSON(cleanTemplate(template), `${template.name.replace(/\s+/g, '-').toLowerCase()}-template.json`);
+    }
+  }, [optionSets]);
+
+  const exportAllTemplates = useCallback(() => {
+    if (optionSets.length > 0) {
+      downloadJSON(optionSets.map(cleanTemplate), "all-templates.json");
+    } else {
+      if (typeof shopify !== 'undefined' && shopify.toast) shopify.toast.show("No custom templates to export");
+    }
+  }, [optionSets]);
+
+  const handleImport = useCallback((event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const json = e.target.result;
+        JSON.parse(json); // validate json
+        fetcher.submit({ intent: "import", importData: json }, { method: "POST" });
+        if (typeof shopify !== 'undefined' && shopify.toast) shopify.toast.show("Importing templates...");
+      } catch (error) {
+        if (typeof shopify !== 'undefined' && shopify.toast) shopify.toast.show("Invalid JSON file");
+      }
+    };
+    reader.readAsText(file);
+    // Reset input
+    event.target.value = null;
+  }, [fetcher]);
+  // 1. State for Tabs
+  const [selected, setSelected] = useState(0);
+  const handleTabChange = useCallback((tabIndex) => setSelected(tabIndex), []);
+  const navigate = useNavigate();
+
+  // Delete Modal State
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [templateToDelete, setTemplateToDelete] = useState(null);
+
+  const confirmDelete = useCallback((id) => {
+    setTemplateToDelete(id);
+    setDeleteModalOpen(true);
+  }, []);
+
+  const executeDelete = useCallback(() => {
+    if (templateToDelete) {
+      fetcher.submit({ intent: "delete", id: templateToDelete }, { method: "POST" });
+      setDeleteModalOpen(false);
+      setTemplateToDelete(null);
+      if (typeof shopify !== 'undefined' && shopify.toast) {
+        shopify.toast.show("Template deleted");
+      }
+    }
+  }, [templateToDelete, fetcher]);
+
+  // 2. Tab Definitions
+  const tabs = [
+    {
+      id: "pre-designed",
+      content: (
+        <InlineStack gap="200" align="center">
+          <span>Pre-Designed Templates</span>
+          <Badge tone="new">20</Badge>
+        </InlineStack>
+      ),
+    },
+    {
+      id: "personalized",
+      content: (
+        <InlineStack gap="200" align="center">
+          <span>Personalized Templates</span>
+          <Badge tone="new">20</Badge>
+        </InlineStack>
+      ),
+    },
+    {
+      id: "custom",
+      content: (
+        <InlineStack gap="200" align="center">
+          <span>Custom Templates</span>
+          <Badge>{optionSets.length}</Badge>
+        </InlineStack>
+      ),
+    },
+  ];
+
+  // 3. Reusable Template Card Component
+  const TemplateItem = ({ id, title, imageUrl, onClick, onExport }) => (
+    <Card padding="0">
+      <BlockStack>
+        {/* Image Container */}
+        <Box 
+          minHeight="200px" 
+          width="100%" 
+          overflow="hidden" 
+          style={{ borderBottom: '1px solid #e1e3e5' }}
+        >
+          <img 
+            src={imageUrl || "https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"} 
+            alt={title} 
+            style={{ width: "100%", height: "200px", objectFit: "cover" }} 
+          />
+        </Box>
+        
+        {/* Content & Actions */}
+        <Box padding="300">
+          <BlockStack gap="300">
+            <InlineStack align="space-between">
+              <Text variant="headingMd" as="h3">{title}</Text>
+              <InlineStack gap="100">
+                {onExport && (
+                  <Button variant="tertiary" onClick={() => onExport(id)}>Export</Button>
+                )}
+                {onClick && (
+                  <Button variant="tertiary" tone="critical" onClick={() => confirmDelete(id)}>Delete</Button>
+                )}
+              </InlineStack>
+            </InlineStack>
+            <InlineStack gap="200">
+              <Button variant="primary" onClick={onClick ? onClick : () => {
+                if (id) navigate(`/app/option-sets/new?templateId=${id}`);
+                else if (typeof shopify !== 'undefined' && shopify.toast) shopify.toast.show("This template is not available yet");
+              }}>
+                {onClick ? "Edit template" : "+ Use template"}
+              </Button>
+              <Button variant="tertiary">View demo</Button>
+            </InlineStack>
+          </BlockStack>
+        </Box>
+      </BlockStack>
+    </Card>
+  );
+
+  // 4. Content Logic
+  const renderTabContent = () => {
+    switch (selected) {
+      case 0: // Pre-Designed
+        return (
+          <Box padding="400">
+            <InlineGrid columns={{ xs: 1, sm: 2, md: 3, lg: 4 }} gap="400">
+              <TemplateItem title="Glasses" imageUrl="https://burst.shopifycdn.com/photos/black-classic-glasses.jpg?width=400" />
+              <TemplateItem title="Keychain" imageUrl="https://burst.shopifycdn.com/photos/keychain-with-keys.jpg?width=400" />
+              <TemplateItem title="Bracelet" imageUrl="https://burst.shopifycdn.com/photos/silver-and-gold-bracelets.jpg?width=400" />
+              <TemplateItem title="Mug" imageUrl="https://burst.shopifycdn.com/photos/white-ceramic-mug.jpg?width=400" />
+            </InlineGrid>
+          </Box>
+        );
+      case 1: // Personalized
+        return (
+          <Box padding="400">
+            <InlineGrid columns={{ xs: 1, sm: 2, md: 3, lg: 4 }} gap="400">
+              <TemplateItem title="Photo Frame" imageUrl="https://burst.shopifycdn.com/photos/horse-in-snow.jpg?width=400" />
+              <TemplateItem title="Custom Mug" imageUrl="https://burst.shopifycdn.com/photos/coffee-in-bed.jpg?width=400" />
+            </InlineGrid>
+          </Box>
+        );
+      case 2: // Custom
+        return (
+          <Box padding={optionSets.length === 0 ? "800" : "400"}>
+            {optionSets.length === 0 ? (
+              <EmptyState
+                heading="No templates found"
+                action={{ content: "Create template", variant: "primary", onAction: () => navigate("/app/templates/new") }}
+                secondaryAction={{ content: "Learn more" }}
+                image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
+              >
+                <p>Try changing the filters or search term</p>
+              </EmptyState>
+            ) : (
+              <InlineGrid columns={{ xs: 1, sm: 2, md: 3, lg: 4 }} gap="400">
+                {optionSets.map(optSet => (
+                  <TemplateItem 
+                    key={optSet.id} 
+                    id={optSet.id}
+                    title={optSet.name} 
+                    onClick={() => navigate(`/app/templates/${optSet.id}`)}
+                    onExport={exportTemplate}
+                  />
+                ))}
+              </InlineGrid>
+            )}
+          </Box>
+        );
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <s-page heading="Option Templates">
+      <s-section>
+        <InlineStack align="space-between" variant="headingLg" as="h2" blockAlign="center">
+          <s-text size="large">Option Templates</s-text>
+          <InlineStack gap="300">
+            <Button onClick={() => fileInputRef.current?.click()}>Import template</Button>
+            <Button onClick={exportAllTemplates}>Export templates</Button>
+            <Button variant="primary" onClick={() => navigate("/app/templates/new")}>Create template</Button>
+          </InlineStack>
+        </InlineStack>
+        <input 
+          type="file" 
+          accept=".json" 
+          ref={fileInputRef} 
+          style={{ display: "none" }} 
+          onChange={handleImport} 
+        />
+      </s-section>
+
+      <s-section>
+        <Card padding="0">
+          <Tabs tabs={tabs} selected={selected} onSelect={handleTabChange}>
+            {renderTabContent()}
+          </Tabs>
+        </Card>
+
+        <Modal
+          open={deleteModalOpen}
+          onClose={() => setDeleteModalOpen(false)}
+          title="Delete template?"
+          primaryAction={{
+            content: "Delete",
+            destructive: true,
+            onAction: executeDelete,
+          }}
+          secondaryActions={[
+            {
+              content: "Cancel",
+              onAction: () => setDeleteModalOpen(false),
+            },
+          ]}
+        >
+          <Modal.Section>
+            <Text as="p">This can&apos;t be undone.</Text>
+          </Modal.Section>
+        </Modal>
+      </s-section>
+    </s-page>
+  );
+}

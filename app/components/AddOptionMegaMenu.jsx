@@ -1,0 +1,125 @@
+import { useState, useCallback } from "react";
+import {
+  Popover,
+  Button,
+  Text,
+  InlineStack,
+  ActionList,
+} from "@shopify/polaris";
+
+/**
+ * Full element categories for the "Add option" mega-menu popover.
+ * Organized into 5 columns matching the ElementTypePicker categories.
+ */
+const elementCategories = [
+  {
+    title: "Single Input",
+    items: [
+      { label: "Text", icon: "📝", description: "Customers enter text." },
+      { label: "Textarea", icon: "📄", description: "Customers enter multi-line text." },
+      { label: "Number", icon: "#️⃣", description: "Customers enter a number." },
+      { label: "Phone", icon: "📞", description: "Customers enter phone number." },
+      { label: "Email", icon: "✉️", description: "Customers enter email." },
+      { label: "Hidden Field", icon: "🔒", description: "Hidden data field." },
+      { label: "Datetime", icon: "📅", description: "Date & time picker." },
+      { label: "File Upload", icon: "📎", description: "Customers upload a file." },
+      { label: "Color Picker", icon: "🎨", description: "Customers pick a color." },
+    ],
+  },
+  {
+    title: "Choice List",
+    items: [
+      { label: "Dropdown", icon: "⌄", description: "Toggleable menu list." },
+      { label: "Color Dropdown", icon: "🎨⌄", description: "Color select dropdown." },
+      { label: "Image Dropdown", icon: "🖼️⌄", description: "Image select dropdown." },
+      { label: "Select", icon: "☑️", description: "Dropdown list selection." },
+      { label: "Radio Button", icon: "◉", description: "Customers select one option." },
+      { label: "Checkbox", icon: "☐", description: "Customers check/uncheck." },
+    ],
+  },
+  {
+    title: "Swatch",
+    items: [
+      { label: "Button", icon: "🔘", description: "Button swatch selector." },
+      { label: "Color Swatch", icon: "🎨", description: "Color swatch selector." },
+      { label: "Image Swatch", icon: "🖼️", description: "Image swatch selector." },
+    ],
+  },
+  {
+    title: "Static Text",
+    items: [
+      { label: "Heading", icon: "H", description: "Form section header." },
+      { label: "Divider", icon: "—", description: "Horizontal line divider." },
+      { label: "Paragraph", icon: "¶", description: "Descriptive paragraph." },
+      { label: "HTML", icon: "</>", description: "Custom HTML block." },
+      { label: "Pop-up Modal", icon: "↗", description: "Pop-up modal content." },
+    ],
+  },
+  {
+    title: "Others",
+    items: [
+      { label: "Switch", icon: "⇋", description: "Toggle switch control." },
+      { label: "Google Font Selector", icon: "Aa", description: "Font picker." },
+      { label: "Tabs", icon: "⊞", description: "Tabbed content sections." },
+    ],
+  },
+];
+
+/**
+ * AddOptionMegaMenu — A multi-column popover mega-menu for adding
+ * template option elements, categorized by type.
+ */
+export default function AddOptionMegaMenu({ onSelect }) {
+  const [active, setActive] = useState(false);
+  const toggleActive = useCallback(() => setActive((prev) => !prev), []);
+
+  const handleSelect = useCallback(
+    (item) => {
+      onSelect({
+        type: item.label,
+        label: item.label,
+        subtext: item.description,
+        icon: item.icon,
+      });
+      setActive(false);
+    },
+    [onSelect]
+  );
+
+  const activator = (
+    <Button variant="plain" onClick={toggleActive}>
+      <InlineStack gap="100" blockAlign="center">
+        <Text as="span" tone="magic" fontWeight="semibold">⊕</Text>
+        <Text as="span" tone="magic" fontWeight="medium">Add option</Text>
+      </InlineStack>
+    </Button>
+  );
+
+  return (
+    <Popover
+      active={active}
+      activator={activator}
+      onClose={() => setActive(false)}
+      preferredAlignment="left"
+      preferredPosition="below"
+      autofocusTarget="none"
+    >
+      <Popover.Pane fixedHeight>
+        <div style={{ maxHeight: "60vh" }}>
+          <ActionList
+            actionRole="menuitem"
+            sections={elementCategories.map((category) => ({
+              title: category.title,
+              items: category.items.map((item) => ({
+                content: item.label,
+                helpText: item.description,
+                prefix: <span style={{ fontSize: "16px", width: "24px", textAlign: "center" }}>{item.icon}</span>,
+                onAction: () => handleSelect(item),
+              })),
+            }))}
+          />
+        </div>
+      </Popover.Pane>
+    </Popover>
+  );
+}

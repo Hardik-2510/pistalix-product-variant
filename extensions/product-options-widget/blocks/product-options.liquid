@@ -1,0 +1,36 @@
+{% schema %}
+{
+  "name": "Pistalix Globo",
+  "target": "body",
+  "settings": []
+}
+{% endschema %}
+
+  {% assign product_metafield = product.metafields.pistalix.product_options %}
+  {% assign shop_metafield = shop.metafields.pistalix.global_product_options %}
+  
+  {% if product_metafield != blank %}
+    {% assign template_data = product_metafield.value %}
+  {% elsif shop_metafield != blank %}
+    {% assign template_data = shop_metafield.value %}
+  {% else %}
+    {% assign template_data = blank %}
+  {% endif %}
+
+  {% assign app_settings = shop.metafields.pistalix.settings.value %}
+
+  <div 
+    id="cap-product-options"
+    data-template-json="{{ template_data | json | escape }}"
+    data-app-settings="{{ app_settings | json | escape }}"
+    data-source="{% if template_data != blank %}metafield{% else %}api{% endif %}"
+    data-product-id="{{ product.id }}"
+    data-product-price="{{ product.price }}"
+    data-shop="{{ shop.permanent_domain }}"
+    data-currency="{{ cart.currency.iso_code }}"
+    data-page-type="{{ request.page_type }}"
+    data-money-format="{{ shop.money_format | escape }}">
+  </div>
+  
+  {{ 'product-options.css' | asset_url | stylesheet_tag }}
+  <script src="{{ 'product-options.js' | asset_url }}" defer="defer"></script>

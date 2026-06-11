@@ -1,0 +1,1897 @@
+/**
+ * Pistalix Globo — Product Options Widget
+ * 
+ * Supports two data sources:
+ * 1. Metafield (preferred): Template JSON embedded in page via Liquid
+ * 2. API fallback: Fetches template from the app's API endpoint
+ */
+
+var capConfig = {
+  basePrice: 0,
+  moneyFormat: '${{amount}}'
+};
+
+function initPistalixWidget() {
+  var container = document.getElementById('cap-product-options');
+  if (!container) return;
+  // Prevent double initialization
+  if (container.getAttribute('data-initialized') === 'true') return;
+  container.setAttribute('data-initialized', 'true');
+
+  var settingsAttr = container.getAttribute('data-app-settings');
+  if (settingsAttr) {
+    try { 
+      capConfig.settings = JSON.parse(settingsAttr); 
+      if (typeof capConfig.settings === 'string') {
+        capConfig.settings = JSON.parse(capConfig.settings);
+      }
+    } catch(e) {}
+  }
+
+  var toggleStates = capConfig.settings ? capConfig.settings.toggleStates : {};
+  var pageType = container.getAttribute('data-page-type');
+  
+  if (toggleStates) {
+    if (pageType === 'index' && toggleStates.homePageWidget === false) {
+      container.style.display = 'none';
+      return;
+    }
+    if (pageType === 'collection' && toggleStates.collectionQuickview === false) {
+      container.style.display = 'none';
+      return;
+    }
+    // "Regular page" covers anything else not specifically product/index/collection
+    if (pageType !== 'product' && pageType !== 'index' && pageType !== 'collection' && toggleStates.regularPageWidget === false) {
+      container.style.display = 'none';
+      return;
+    }
+  }
+
+  var source = container.getAttribute('data-source');
+
+  if (source === 'metafield') {
+    try {
+      var raw = container.getAttribute('data-template-json');
+      var template = JSON.parse(raw);
+      if (typeof template === 'string') {
+        template = JSON.parse(template);
+      }
+      if (template && template.elements && template.elements.length > 0) {
+        renderTemplate(template, container);
+      } else {
+        container.style.display = 'none';
+      }
+    } catch (e) {
+      console.error('Pistalix: Failed to parse metafield template data', e);
+      container.style.display = 'none';
+    }
+  } else if (source === 'api') {
+    var productId = container.getAttribute('data-product-id');
+    var shop = container.getAttribute('data-shop');
+    
+    if (!productId || !shop) { container.style.display = 'none'; return; }
+
+    // Use Shopify App Proxy endpoint
+    fetchTemplate(productId, shop, '/apps/product-options');
+  } else {
+    container.style.display = 'none';
+  }
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initPistalixWidget);
+} else {
+  initPistalixWidget();
+}
+
+if (!window.pistalixSubmitTrackerRegistered) {
+  window.pistalixSubmitTrackerRegistered = true;
+  window.pistalixLastSubmittedForm = null;
+  document.addEventListener('submit', function(e) {
+    window.pistalixLastSubmittedForm = e.target;
+  }, true);
+}
+
+async function fetchTemplate(productId, shop, appUrl) {
+  try {
+    var url = appUrl + '/api/product-options?productId=' + productId + '&shop=' + shop;
+    var response = await fetch(url);
+    var data = await response.json();
+    var container = document.getElementById('cap-product-options');
+    if (!data.found || !data.template || !data.template.elements.length) {
+      container.style.display = 'none';
+      return;
+    }
+    renderTemplate(data.template, container);
+  } catch (error) {
+    console.error('Pistalix: API fetch error', error);
+    document.getElementById('cap-product-options').style.display = 'none';
+  }
+}
+
+/* ─── Helpers ────────────────────────────────────────────────── */
+
+function parseConfig(configVal) {
+  if (!configVal) return {};
+  if (typeof configVal === 'object') return configVal;
+  try { return JSON.parse(configVal); } catch (e) { return {}; }
+}
+
+function getChoices(config) {
+  return config.choices || config.options || config.swatches || [];
+}
+
+function isDefault(opt) {
+  return opt.default === true || String(opt.default) === 'true';
+}
+
+function formatMoney(cents, format) {
+  if (typeof cents === 'string') cents = cents.replace('.', '');
+  var value = '';
+  var placeholderRegex = /\{\{\s*(\w+)\s*\}\}/;
+  var formatString = format || '${{amount}}';
+  
+  function defaultTo(val, def) {
+    return val == null || val !== val ? def : val;
+  }
+  function formatWithDelimiters(num, precision, thousands, decimal) {
+    precision = defaultTo(precision, 2);
+    thousands = defaultTo(thousands, ',');
+    decimal = defaultTo(decimal, '.');
+    if (isNaN(num) || num == null) { return 0; }
+    num = (num / 100.0).toFixed(precision);
+    var parts = num.split('.');
+    var dollars = parts[0].replace(/(\d)(?=(\d\d\d)+(?!\d))/g, '$1' + thousands);
+    var cents = parts[1] ? (decimal + parts[1]) : '';
+    return dollars + cents;
+  }
+
+  var match = formatString.match(placeholderRegex);
+  if (!match) return formatWithDelimiters(cents, 2);
+
+  switch(match[1]) {
+    case 'amount':
+      value = formatWithDelimiters(cents, 2);
+      break;
+    case 'amount_no_decimals':
+      value = formatWithDelimiters(cents, 0);
+      break;
+    case 'amount_with_comma_separator':
+      value = formatWithDelimiters(cents, 2, '.', ',');
+      break;
+    case 'amount_no_decimals_with_comma_separator':
+      value = formatWithDelimiters(cents, 0, '.', ',');
+      break;
+    default:
+      value = formatWithDelimiters(cents, 2);
+  }
+  return formatString.replace(placeholderRegex, value);
+}
+
+function getOptionLabel(opt) {
+  var p = parseFloat(opt.price);
+  if (!isNaN(p) && p > 0) {
+    var cents = p * 100; // usually admin price is in dollars
+    var settings = capConfig.settings || {};
+    var addonMoneyFormat = settings.addonMoneyFormat || "With currency";
+    var addonLabelFormat = settings.addonLabelFormat || "(+ {{addon}})";
+    
+    var formattedMoney = formatMoney(cents, capConfig.moneyFormat);
+    if (addonMoneyFormat === "Without currency") {
+      // Just extract the number with decimals/commas
+      formattedMoney = formatMoney(cents, '{{amount}}');
+    }
+    
+    var addonString = addonLabelFormat.replace('{{addon}}', formattedMoney);
+    return opt.label + ' ' + addonString;
+  }
+  return opt.label;
+}
+
+function getOptionPriceCents(opt) {
+  var p = parseFloat(opt.price);
+  if (!isNaN(p) && p > 0) {
+    return Math.round(p * 100);
+  }
+  return 0;
+}
+
+function updateTotalPrice() {
+  evaluateStorefrontConditions();
+
+  var totalAddonCents = 0;
+  // Selects
+  var selects = document.querySelectorAll('.cap-options-wrapper select.cap-select');
+  selects.forEach(function(select) {
+    var group = select.closest('.cap-option-group');
+    if (group && group.style.display === 'none') return;
+
+    if (select.selectedIndex >= 0) {
+      var opt = select.options[select.selectedIndex];
+      if (opt && opt.value !== '') {
+        var p = parseInt(opt.getAttribute('data-price') || '0', 10);
+        totalAddonCents += p;
+      }
+    }
+  });
+
+  // Radios and Checkboxes
+  var inputs = document.querySelectorAll('.cap-options-wrapper input[type="radio"]:checked, .cap-options-wrapper input[type="checkbox"]:checked');
+  inputs.forEach(function(input) {
+    var group = input.closest('.cap-option-group');
+    if (group && group.style.display === 'none') return;
+
+    var p = parseInt(input.getAttribute('data-price') || '0', 10);
+    totalAddonCents += p;
+  });
+
+  // Swatches (Button, Color, Image)
+  var swatches = document.querySelectorAll('.cap-options-wrapper .cap-selected');
+  swatches.forEach(function(swatch) {
+    var group = swatch.closest('.cap-option-group');
+    if (group && group.style.display === 'none') return;
+
+    var p = parseInt(swatch.getAttribute('data-price') || '0', 10);
+    totalAddonCents += p;
+  });
+
+  var finalPriceCents = capConfig.basePrice + totalAddonCents;
+  var formattedPrice = formatMoney(finalPriceCents, capConfig.moneyFormat);
+
+  // Update Cart Transform Hidden Inputs
+  var wrapper = document.querySelector('.cap-options-wrapper');
+  if (wrapper && totalAddonCents !== 0) {
+    var ensureHiddenInput = function(name, val) {
+      var inp = wrapper.querySelector('input[name="' + name + '"]');
+      if (!inp) {
+        inp = document.createElement('input');
+        inp.type = 'hidden';
+        inp.name = name;
+        wrapper.appendChild(inp);
+      }
+      inp.value = val;
+    };
+    var zeroDecimalCurrencies = ['BIF', 'CLP', 'DJF', 'GNF', 'JPY', 'KMF', 'KRW', 'LAK', 'PYG', 'RWF', 'UGX', 'VND', 'VUV', 'XAF', 'XOF', 'XPF'];
+    var isZeroDecimal = zeroDecimalCurrencies.indexOf(capConfig.currency || 'USD') !== -1;
+    var formattedBase = isZeroDecimal ? capConfig.basePrice.toString() : (capConfig.basePrice / 100).toFixed(2);
+    var formattedFinal = isZeroDecimal ? finalPriceCents.toString() : (finalPriceCents / 100).toFixed(2);
+    var formattedAddon = isZeroDecimal ? totalAddonCents.toString() : (totalAddonCents / 100).toFixed(2);
+
+    ensureHiddenInput('properties[_base_price]', formattedBase);
+    ensureHiddenInput('properties[_final_price]', formattedFinal);
+    ensureHiddenInput('properties[_price_adjustments]', JSON.stringify({ totalAddon: formattedAddon }));
+  } else if (wrapper) {
+    // If no addons, remove the inputs so cart transform ignores this line
+    var fields = wrapper.querySelectorAll('input[name="properties[_base_price]"], input[name="properties[_final_price]"], input[name="properties[_price_adjustments]"]');
+    fields.forEach(function(f) { f.remove(); });
+  }
+
+  var toggleStates = capConfig.settings ? capConfig.settings.toggleStates : {};
+  var shouldAddPriceToProduct = toggleStates ? toggleStates.addAddonPriceToProductPrice : true;
+  var showAddonMessage = toggleStates ? toggleStates.showAddonMessage : true;
+
+  // Add-on message rendering inside the widget
+  if (wrapper && showAddonMessage) {
+    var existingTotalLine = wrapper.querySelector('.cap-addon-total-message');
+    if (totalAddonCents > 0) {
+      if (!existingTotalLine) {
+        existingTotalLine = document.createElement('div');
+        existingTotalLine.className = 'cap-addon-total-message cap-option-group';
+        existingTotalLine.style.marginTop = '10px';
+        existingTotalLine.style.paddingTop = '10px';
+        existingTotalLine.style.borderTop = '1px solid #e5e7eb';
+        existingTotalLine.style.fontWeight = 'normal';
+        existingTotalLine.style.fontSize = '16px';
+        wrapper.appendChild(existingTotalLine);
+      }
+      var formattedAddonMoney = formatMoney(totalAddonCents, capConfig.moneyFormat);
+      existingTotalLine.innerHTML = 'Selections will add <span>' + formattedAddonMoney + '</span> to the price';
+    } else if (existingTotalLine) {
+      existingTotalLine.remove();
+    }
+  }
+
+  if (shouldAddPriceToProduct !== false) {
+    // Dynamic selector finding so we don't depend on DOM ready order
+    var selectors = [
+      '.price-item--sale',
+      '.price__sale .price-item--sale',
+      '.price-item--regular',
+      '.price__regular .price-item--regular',
+      '.product-single__price',
+      '.product__price',
+      '.price .price-item',
+      '.current-price',
+      '[data-product-price]',
+      '.product-price'
+    ];
+    
+    selectors.forEach(function(sel) {
+      document.querySelectorAll(sel).forEach(function(el) {
+        // Don't update the strikethrough compare-at price when on sale
+        if (el.closest('.price--on-sale') && !el.closest('.price__sale')) return;
+        
+        // Update DOM
+        el.innerHTML = formattedPrice;
+      });
+    });
+  }
+}
+
+function initPriceTracking(container) {
+  var priceAttr = container.getAttribute('data-product-price') || '0';
+  if (priceAttr.indexOf('.') !== -1) {
+    capConfig.basePrice = Math.round(parseFloat(priceAttr) * 100);
+  } else {
+    capConfig.basePrice = parseInt(priceAttr, 10);
+  }
+  capConfig.moneyFormat = container.getAttribute('data-money-format') || '${{amount}}';
+  capConfig.currency = container.getAttribute('data-currency') || 'USD';
+}
+
+function createGroup(element) {
+  var group = document.createElement('div');
+  group.className = 'cap-option-group';
+  group.setAttribute('data-id', element.id || '');
+  group.setAttribute('data-required', element.required ? 'true' : 'false');
+  group.setAttribute('data-type', element.type);
+  group._element = element;
+
+  var labelWrap = document.createElement('div');
+  // Use div instead of label to avoid theme CSS overriding label styles
+  var labelEl = document.createElement('div');
+  labelEl.className = 'cap-label';
+  labelEl.textContent = element.label;
+  labelWrap.appendChild(labelEl);
+
+  if (element.required) {
+    var req = document.createElement('span');
+    req.className = 'cap-required';
+    req.textContent = '*';
+    labelWrap.appendChild(req);
+  }
+  group.appendChild(labelWrap);
+
+  if (element.subtext) {
+    var help = document.createElement('div');
+    help.className = 'cap-help-text';
+    help.textContent = element.subtext;
+    group.appendChild(help);
+  }
+  return group;
+}
+
+function createErrorMsg() {
+  var err = document.createElement('div');
+  err.className = 'cap-error';
+  err.textContent = 'This field is required';
+  return err;
+}
+
+function propName(label) {
+  return 'properties[' + label + ']';
+}
+
+/* ─── Render Template ────────────────────────────────────────── */
+
+function renderTemplate(template, container) {
+  initPriceTracking(container);
+  container.innerHTML = '';
+  container.style.display = '';
+
+  var wrapper = document.createElement('div');
+  wrapper.className = 'cap-options-wrapper';
+
+  var elements = template.elements;
+
+  elements.forEach(function(element) {
+    var typeLower = (element.type || '').toLowerCase();
+    var elDOM = null;
+
+    if (typeLower === 'text' || typeLower === 'email' || typeLower === 'phone') elDOM = renderText(element);
+    else if (typeLower === 'textarea') elDOM = renderTextarea(element);
+    else if (typeLower === 'number') elDOM = renderNumber(element);
+    else if (typeLower === 'datetime') elDOM = renderDate(element);
+    else if (typeLower === 'dropdown' || typeLower === 'select') elDOM = renderDropdown(element);
+    else if (typeLower === 'color dropdown' || typeLower === 'color_dropdown') elDOM = renderColorDropdown(element);
+    else if (typeLower === 'image dropdown' || typeLower === 'image_dropdown') elDOM = renderImageDropdown(element);
+    else if (typeLower === 'radio button' || typeLower === 'radio_button') elDOM = renderRadio(element);
+    else if (typeLower === 'checkbox') elDOM = renderCheckbox(element);
+    else if (typeLower === 'button') elDOM = renderButtonSwatch(element);
+    else if (typeLower === 'color swatch' || typeLower === 'color_swatch') elDOM = renderColorSwatch(element);
+    else if (typeLower === 'image swatch' || typeLower === 'image_swatch') elDOM = renderImageSwatch(element);
+    else if (typeLower === 'heading') elDOM = renderHeading(element);
+    else if (typeLower === 'divider') elDOM = renderDivider(element);
+    else if (typeLower === 'paragraph') elDOM = renderParagraph(element);
+    else if (typeLower === 'pop-up modal' || typeLower === 'popup_modal' || typeLower === 'size chart' || typeLower === 'size_chart') elDOM = renderPopupModal(element);
+    else if (typeLower === 'html') elDOM = renderHTML(element);
+    else if (typeLower === 'spacing') elDOM = renderSpacing(element);
+    else if (typeLower === 'switch') elDOM = renderSwitch(element);
+    else elDOM = null;
+
+    if (elDOM) wrapper.appendChild(elDOM);
+  });
+
+  var trackInput = document.createElement('input');
+  trackInput.type = 'hidden';
+  trackInput.name = 'properties[_CustomOptions]';
+  trackInput.value = 'true';
+  wrapper.appendChild(trackInput);
+
+  // Trigger re-evaluation of conditions and pricing on any customer input
+  wrapper.addEventListener('input', updateTotalPrice);
+  wrapper.addEventListener('change', updateTotalPrice);
+
+  applyDynamicStyles(wrapper, container);
+
+  container.appendChild(wrapper);
+  // Hide the original container div — the wrapper will be moved
+  // into the cart form by injectIntoCartForm. Hiding prevents
+  // the container from creating a duplicate empty block in the DOM.
+  container.style.display = 'none';
+  injectIntoCartForm(wrapper, container);
+
+  // Initialize total price taking into account default selections
+  setTimeout(updateTotalPrice, 100);
+}
+
+function applyDynamicStyles(wrapper, container) {
+  var appSettings = capConfig.settings || {};
+  if (typeof appSettings === 'string') {
+    try { appSettings = JSON.parse(appSettings); } catch(e) {}
+  }
+  
+  var colors = appSettings.colors || {};
+  var alignment = appSettings.alignment || "left";
+  
+  var style = document.createElement('style');
+  var css = '';
+
+  // General
+  css += '.cap-options-wrapper { text-align: ' + alignment + ' !important; background-color: ' + (colors.appBackground || 'transparent') + ' !important; }\n';
+  css += '.cap-options-wrapper .cap-label { color: ' + (colors.labelText || '#111827') + ' !important; }\n';
+  css += '.cap-options-wrapper .cap-required { color: ' + (colors.requiredCharacter || 'red') + ' !important; }\n';
+  css += '.cap-options-wrapper .cap-help-text { color: ' + (colors.helpText || '#666') + ' !important; }\n';
+  css += '.cap-options-wrapper .cap-addon-total-message { color: ' + (colors.totalText || '#202223') + ' !important; }\n';
+  css += '.cap-options-wrapper .cap-addon-total-message span { color: ' + (colors.totalTextMoney || '#008000') + ' !important; }\n';
+
+  // Single Input
+  css += '.cap-options-wrapper .cap-input { color: ' + (colors.inputText || '#111827') + ' !important; border-color: ' + (colors.inputBorder || '#d1d5db') + ' !important; background-color: ' + (colors.inputBackground || '#ffffff') + ' !important; }\n';
+  css += '.cap-options-wrapper .cap-switch-track { background-color: ' + (colors.switchBackground || '#dddddd') + ' !important; }\n';
+  css += '.cap-options-wrapper input:checked + .cap-switch-track { background-color: ' + (colors.switchActiveBackground || '#ea1255') + ' !important; }\n';
+
+  // Choice List (Dropdowns)
+  var ddText = colors.dropdownText || colors.inputText || '#111827';
+  var ddBorder = colors.dropdownBorder || colors.inputBorder || '#d1d5db';
+  var ddBg = colors.dropdownBackground || colors.inputBackground || '#ffffff';
+  var ddSel = colors.dropdownSelected || '#f8e0e6';
+  css += '.cap-options-wrapper .cap-select, .cap-options-wrapper .cap-image-dropdown-selected, .cap-options-wrapper .cap-color-dropdown-selected, .cap-options-wrapper .cap-image-dropdown-item, .cap-options-wrapper .cap-color-dropdown-item { color: ' + ddText + ' !important; background-color: ' + ddBg + ' !important; }\n';
+  css += '.cap-options-wrapper .cap-select, .cap-options-wrapper .cap-image-dropdown-selected, .cap-options-wrapper .cap-color-dropdown-selected, .cap-options-wrapper .cap-image-dropdown-list, .cap-options-wrapper .cap-color-dropdown-list { border-color: ' + ddBorder + ' !important; }\n';
+  css += '.cap-options-wrapper .cap-image-dropdown-item:hover, .cap-options-wrapper .cap-color-dropdown-item:hover { background-color: ' + ddSel + ' !important; }\n';
+
+  // Choice List (Radio/Checkbox)
+  css += '.cap-options-wrapper .cap-radio-option, .cap-options-wrapper .cap-checkbox-option { color: ' + (colors.checkboxRadioText || '#111827') + ' !important; }\n';
+  css += '.cap-options-wrapper .cap-radio-option:hover, .cap-options-wrapper .cap-checkbox-option:hover { color: ' + (colors.checkboxRadioTextHover || '#111827') + ' !important; }\n';
+  css += '.cap-options-wrapper input[type="radio"]:hover, .cap-options-wrapper input[type="checkbox"]:hover { accent-color: ' + (colors.checkboxRadioHover || '#eb1256') + ' !important; }\n';
+  css += '.cap-options-wrapper input[type="radio"]:checked, .cap-options-wrapper input[type="checkbox"]:checked { accent-color: ' + (colors.checkboxRadioActive || '#eb1256') + ' !important; }\n';
+  css += '.cap-options-wrapper .cap-radio-option input:checked ~ span, .cap-options-wrapper .cap-checkbox-option input:checked ~ span { color: ' + (colors.checkboxRadioTextActive || '#111827') + ' !important; }\n';
+
+  // Swatches
+  var btnText = colors.buttonText || '#111827';
+  var btnBg = colors.buttonBackground || '#ffffff';
+  var btnTextHov = colors.buttonTextHover || '#eb1256';
+  var btnBgHov = colors.buttonBackgroundHover || '#ffffff';
+  var btnTextAct = colors.buttonTextActive || '#ffffff';
+  var btnBgAct = colors.buttonBackgroundActive || '#eb1256';
+  
+  css += '.cap-options-wrapper .cap-button-swatch { color: ' + btnText + ' !important; background-color: ' + btnBg + ' !important; border-color: ' + (colors.inputBorder || '#d1d5db') + ' !important; }\n';
+  css += '.cap-options-wrapper .cap-button-swatch:hover { color: ' + btnTextHov + ' !important; background-color: ' + btnBgHov + ' !important; border-color: ' + btnBgHov + ' !important; }\n';
+  css += '.cap-options-wrapper .cap-button-swatch.cap-selected { color: ' + btnTextAct + ' !important; background-color: ' + btnBgAct + ' !important; border-color: ' + btnBgAct + ' !important; }\n';
+  css += '.cap-options-wrapper .cap-color-swatch.cap-selected, .cap-options-wrapper .cap-image-swatch.cap-selected { border-color: ' + btnBgAct + ' !important; }\n';
+
+  style.innerHTML = css;
+  wrapper.appendChild(style);
+}
+
+/* ─── Form Injection & Validation ────────────────────────────── */
+
+function validateCustomOptions() {
+  var isValid = true;
+  var firstErrorEl = null;
+
+  var wrapper = document.querySelector('.cap-options-wrapper');
+  if (!wrapper) return true;
+
+  // Clear previous errors
+  wrapper.querySelectorAll('.cap-error').forEach(function(msg) { msg.classList.remove('visible'); });
+  wrapper.querySelectorAll('.error').forEach(function(el) { el.classList.remove('error'); });
+
+  wrapper.querySelectorAll('.cap-option-group[data-required="true"]').forEach(function(group) {
+    if (group.style.display === 'none') return;
+    var type = group.getAttribute('data-type');
+    var isGroupValid = true;
+
+    if (['Text', 'Textarea', 'Number', 'Email', 'Phone', 'Datetime', 'Dropdown', 'Select', 'Color Dropdown', 'Image Dropdown'].indexOf(type) !== -1) {
+      var input = group.querySelector('input, select, textarea');
+      if (!input || !input.value || input.value.trim() === '') {
+        isGroupValid = false;
+        if (input) {
+          input.classList.add('error');
+          if (type === 'Color Dropdown' || type === 'Image Dropdown') {
+            var customSelect = group.querySelector('.cap-color-dropdown-selected, .cap-image-dropdown-selected');
+            if (customSelect) customSelect.classList.add('error');
+          }
+        }
+      }
+    } else if (['Radio Button', 'Color Swatch', 'Image Swatch', 'Button'].indexOf(type) !== -1) {
+      var hiddenInput = group.querySelector('input[type="hidden"]');
+      if (!hiddenInput || !hiddenInput.value) {
+        isGroupValid = false;
+        var swatchGroup = group.querySelector('.cap-swatch-group, .cap-radio-group');
+        if (swatchGroup) swatchGroup.classList.add('error');
+      }
+    } else if (type === 'Checkbox') {
+      var checked = group.querySelectorAll('input[type="checkbox"]:checked');
+      if (checked.length === 0) {
+        isGroupValid = false;
+        var checkboxGroup = group.querySelector('.cap-checkbox-group');
+        if (checkboxGroup) checkboxGroup.classList.add('error');
+      }
+    }
+
+    if (!isGroupValid) {
+      isValid = false;
+      var errorMsg = group.querySelector('.cap-error');
+      if (errorMsg) errorMsg.classList.add('visible');
+      if (!firstErrorEl) firstErrorEl = group;
+    }
+  });
+
+  wrapper.querySelectorAll('.cap-option-group[data-type="Checkbox"]').forEach(function(group) {
+    if (group.style.display === 'none') return;
+    var checked = Array.from(group.querySelectorAll('input[type="checkbox"]:checked')).map(function(cb) { return cb.value; });
+    var hiddenInput = group.querySelector('input[type="hidden"]');
+    if (hiddenInput) hiddenInput.value = checked.join(', ');
+  });
+
+  if (!isValid && firstErrorEl) {
+    var toggleStates = capConfig.settings ? capConfig.settings.toggleStates : {};
+    if (toggleStates.autoScroll !== false) {
+      firstErrorEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }
+
+  return isValid;
+}
+
+function injectIntoCartForm(wrapper, container) {
+  var cartForm = container.closest('form[action*="/cart/add"], form');
+  
+  if (!cartForm) {
+    // Traverse up to find the closest product section form
+    var parent = container.parentElement;
+    while (parent && !cartForm) {
+      cartForm = parent.querySelector('form[action*="/cart/add"]');
+      parent = parent.parentElement;
+    }
+  }
+
+  if (!cartForm) {
+    cartForm = document.querySelector('form[action*="/cart/add"]');
+  }
+
+  if (!cartForm) return;
+
+  var appSettings = {};
+  var settingsAttr = container.getAttribute('data-app-settings');
+  if (settingsAttr) {
+    try { appSettings = JSON.parse(settingsAttr); } catch(e) {}
+  }
+  
+  var position = appSettings.position || "Above add to cart button";
+  var customSelector = appSettings.customSelector;
+
+  if (position.includes("HTML element") && customSelector) {
+    var targetEl = document.querySelector(customSelector);
+    if (targetEl) {
+      if (position === "Above an HTML element") targetEl.before(wrapper);
+      else if (position === "Below an HTML element") targetEl.after(wrapper);
+      else if (position === "At the start of an HTML element") targetEl.prepend(wrapper);
+      else if (position === "At the end of HTML element") targetEl.append(wrapper);
+      else targetEl.before(wrapper); // Fallback
+    } else {
+      // Fallback if selector not found
+      if (cartForm) cartForm.appendChild(wrapper);
+    }
+  } else if (position.includes("product variants")) {
+    var variantEl = cartForm ? cartForm.querySelector('variant-selects, variant-radios, .product-form__input, .product-variant-picker, .selector-wrapper') : null;
+    if (!variantEl) variantEl = document.querySelector('variant-selects, variant-radios, .product-form__input, .product-variant-picker, .selector-wrapper');
+    if (variantEl) {
+      if (position === "Above product variants") variantEl.before(wrapper);
+      else variantEl.after(wrapper);
+    } else {
+      // Fallback
+      if (cartForm) cartForm.appendChild(wrapper);
+    }
+  } else {
+    // Default to cart buttons
+    if (cartForm) {
+      var submitBtn = cartForm.querySelector('button[type="submit"], input[type="submit"], [name="add"]');
+      if (submitBtn && submitBtn.parentNode) {
+        if (position === "Below add to cart button") {
+          submitBtn.parentNode.insertBefore(wrapper, submitBtn.nextSibling);
+        } else {
+          submitBtn.parentNode.insertBefore(wrapper, submitBtn); // Above
+        }
+      } else {
+        cartForm.appendChild(wrapper);
+      }
+    }
+  }
+
+  // Fallback: Bind all inputs explicitly to this form via HTML5 'form' attribute
+  var formId = cartForm.getAttribute('id');
+  if (formId) {
+    wrapper.setAttribute('data-form-id', formId);
+    var bindInputs = function() {
+      wrapper.querySelectorAll('input, select, textarea').forEach(function(inp) {
+        inp.setAttribute('form', formId);
+      });
+    };
+    bindInputs();
+    // Re-bind when dynamically adding hidden price inputs later
+    var observer = new MutationObserver(bindInputs);
+    observer.observe(wrapper, { childList: true, subtree: true });
+  }
+
+  cartForm.addEventListener('submit', function(e) {
+    if (!validateCustomOptions()) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      return false;
+    }
+  });
+
+  // Force-inject properties into cart/add fetch requests to bypass any theme serialization quirks
+  if (!window.pistalixFetchIntercepted) {
+    window.pistalixFetchIntercepted = true;
+    var originalFetch = window.fetch;
+    window.fetch = function() {
+      var url = arguments[0];
+      var config = arguments[1];
+      if (url && typeof url === 'string' && url.indexOf('/cart/add') !== -1) {
+        if (!validateCustomOptions()) {
+          return Promise.reject(new Error("Required options are missing."));
+        }
+        if (config && config.body) {
+          var wrapperEl = null;
+          if (window.pistalixLastSubmittedForm) {
+            wrapperEl = window.pistalixLastSubmittedForm.querySelector('.cap-options-wrapper');
+          }
+          if (!wrapperEl) {
+            wrapperEl = document.querySelector('.cap-options-wrapper');
+          }
+          if (wrapperEl) {
+            var inputs = wrapperEl.querySelectorAll('[name^="properties["]');
+            if (config.body instanceof FormData) {
+              inputs.forEach(function(inp) {
+                if (inp.type === 'radio' && !inp.checked) return;
+                if (inp.type === 'checkbox' && !inp.checked) return;
+                if (inp.disabled) return;
+                if (inp.value) {
+                  config.body.set(inp.name, inp.value);
+                }
+              });
+            } else if (typeof config.body === 'string') {
+              if (config.body.trim().indexOf('{') === 0) {
+                try {
+                  var json = JSON.parse(config.body);
+                  if (!json.properties) json.properties = {};
+                  inputs.forEach(function(inp) {
+                    if (inp.type === 'radio' && !inp.checked) return;
+                    if (inp.type === 'checkbox' && !inp.checked) return;
+                    if (inp.disabled) return;
+                    if (inp.value) {
+                      var propMatch = inp.name.match(/properties\[(.*?)\]/);
+                      if (propMatch && propMatch[1]) {
+                        json.properties[propMatch[1]] = inp.value;
+                      }
+                    }
+                  });
+                  config.body = JSON.stringify(json);
+                } catch (e) {
+                  console.warn("Pistalix: Fetch JSON parse failed", e);
+                }
+              } else {
+                try {
+                  var params = new URLSearchParams(config.body);
+                  inputs.forEach(function(inp) {
+                    if (inp.type === 'radio' && !inp.checked) return;
+                    if (inp.type === 'checkbox' && !inp.checked) return;
+                    if (inp.disabled) return;
+                    if (inp.value) {
+                      params.set(inp.name, inp.value);
+                    }
+                  });
+                  config.body = params.toString();
+                } catch (e) {
+                  console.warn("Pistalix: Fetch query string parse failed", e);
+                }
+              }
+            }
+          }
+        }
+      }
+      return originalFetch.apply(window, arguments);
+    };
+  }
+
+  // Intercept XMLHttpRequest to handle Axios/jQuery cart submit calls
+  if (!window.pistalixXhrIntercepted) {
+    window.pistalixXhrIntercepted = true;
+    var originalOpen = window.XMLHttpRequest.prototype.open;
+    var originalSend = window.XMLHttpRequest.prototype.send;
+    
+    window.XMLHttpRequest.prototype.open = function(method, url) {
+      this._url = url;
+      return originalOpen.apply(this, arguments);
+    };
+
+    window.XMLHttpRequest.prototype.send = function(body) {
+      if (this._url && typeof this._url === 'string' && this._url.indexOf('/cart/add') !== -1) {
+        if (!validateCustomOptions()) {
+          var self = this;
+          setTimeout(function() {
+            self.dispatchEvent(new Event('error'));
+          }, 0);
+          return;
+        }
+
+        // Inject properties into the body
+        var wrapperEl = null;
+        if (window.pistalixLastSubmittedForm) {
+          wrapperEl = window.pistalixLastSubmittedForm.querySelector('.cap-options-wrapper');
+        }
+        if (!wrapperEl) {
+          wrapperEl = document.querySelector('.cap-options-wrapper');
+        }
+        if (wrapperEl && body) {
+          var inputs = wrapperEl.querySelectorAll('[name^="properties["]');
+          if (body instanceof FormData) {
+            inputs.forEach(function(inp) {
+              if (inp.type === 'radio' && !inp.checked) return;
+              if (inp.type === 'checkbox' && !inp.checked) return;
+              if (inp.disabled) return;
+              if (inp.value) {
+                body.set(inp.name, inp.value);
+              }
+            });
+          } else if (typeof body === 'string') {
+            if (body.trim().indexOf('{') === 0) {
+              try {
+                var json = JSON.parse(body);
+                if (!json.properties) json.properties = {};
+                inputs.forEach(function(inp) {
+                  if (inp.type === 'radio' && !inp.checked) return;
+                  if (inp.type === 'checkbox' && !inp.checked) return;
+                  if (inp.disabled) return;
+                  if (inp.value) {
+                    var propMatch = inp.name.match(/properties\[(.*?)\]/);
+                    if (propMatch && propMatch[1]) {
+                      json.properties[propMatch[1]] = inp.value;
+                    }
+                  }
+                });
+                body = JSON.stringify(json);
+              } catch (e) {
+                console.warn("Pistalix: XHR JSON parse failed", e);
+              }
+            } else {
+              try {
+                var params = new URLSearchParams(body);
+                inputs.forEach(function(inp) {
+                  if (inp.type === 'radio' && !inp.checked) return;
+                  if (inp.type === 'checkbox' && !inp.checked) return;
+                  if (inp.disabled) return;
+                  if (inp.value) {
+                    params.set(inp.name, inp.value);
+                  }
+                });
+                body = params.toString();
+              } catch (e) {
+                console.warn("Pistalix: XHR query string parse failed", e);
+              }
+            }
+          }
+        }
+      }
+      return originalSend.call(this, body);
+    };
+  }
+}
+
+/* ─── Element Renderers ──────────────────────────────────────── */
+
+function renderText(element) {
+  var group = createGroup(element);
+  var config = parseConfig(element.config);
+  var input = document.createElement('input');
+  input.type = element.type === 'Email' ? 'email' : (element.type === 'Phone' ? 'tel' : 'text');
+  input.name = propName(element.label);
+  input.className = 'cap-input';
+  if (config.placeholder) input.placeholder = config.placeholder;
+  group.appendChild(input);
+  group.appendChild(createErrorMsg());
+  return group;
+}
+
+function renderTextarea(element) {
+  var group = createGroup(element);
+  var config = parseConfig(element.config);
+  var textarea = document.createElement('textarea');
+  textarea.name = propName(element.label);
+  textarea.className = 'cap-input';
+  textarea.rows = 4;
+  if (config.placeholder) textarea.placeholder = config.placeholder;
+  group.appendChild(textarea);
+  group.appendChild(createErrorMsg());
+  return group;
+}
+
+function renderNumber(element) {
+  var group = createGroup(element);
+  var config = parseConfig(element.config);
+  var input = document.createElement('input');
+  input.type = 'number';
+  input.name = propName(element.label);
+  input.className = 'cap-input';
+  if (config.placeholder) input.placeholder = config.placeholder;
+  group.appendChild(input);
+  group.appendChild(createErrorMsg());
+  return group;
+}
+
+function renderDate(element) {
+  var group = createGroup(element);
+  var input = document.createElement('input');
+  input.type = 'datetime-local';
+  input.name = propName(element.label);
+  input.className = 'cap-input';
+  group.appendChild(input);
+  group.appendChild(createErrorMsg());
+  return group;
+}
+
+function renderDropdown(element) {
+  var group = createGroup(element);
+  var config = parseConfig(element.config);
+  var choices = getChoices(config);
+
+  var hasExplicitDefault = false;
+  for (var idx = 0; idx < choices.length; idx++) {
+    if (isDefault(choices[idx])) {
+      hasExplicitDefault = true;
+      break;
+    }
+  }
+  if (!hasExplicitDefault && choices.length > 0) {
+    choices[0].default = true;
+  }
+
+  var select = document.createElement('select');
+  select.name = propName(element.label);
+  select.className = 'cap-select';
+
+  var defaultOpt = document.createElement('option');
+  defaultOpt.value = '';
+  defaultOpt.textContent = '-- Select ' + element.label + ' --';
+  select.appendChild(defaultOpt);
+
+  choices.forEach(function(opt) {
+    var option = document.createElement('option');
+    option.value = opt.value || opt.label;
+    option.textContent = getOptionLabel(opt);
+    option.setAttribute('data-price', getOptionPriceCents(opt));
+    if (isDefault(opt)) option.selected = true;
+    select.appendChild(option);
+  });
+
+  select.addEventListener('change', updateTotalPrice);
+  group.appendChild(select);
+  group.appendChild(createErrorMsg());
+  return group;
+}
+
+function renderColorDropdown(element) {
+  var group = createGroup(element);
+  var config = parseConfig(element.config);
+  var choices = getChoices(config);
+
+  var hasExplicitDefault = false;
+  for (var idx = 0; idx < choices.length; idx++) {
+    if (isDefault(choices[idx])) {
+      hasExplicitDefault = true;
+      break;
+    }
+  }
+  if (!hasExplicitDefault && choices.length > 0) {
+    choices[0].default = true;
+  }
+
+  var selectedDisplay = document.createElement('div');
+  selectedDisplay.className = 'cap-color-dropdown-selected';
+
+  var selectedThumb = document.createElement('div');
+  selectedThumb.className = 'cap-color-dropdown-thumb';
+  selectedThumb.style.display = 'none';
+  selectedDisplay.appendChild(selectedThumb);
+
+  var selectedText = document.createElement('span');
+  selectedText.textContent = '-- Select ' + element.label + ' --';
+  selectedDisplay.appendChild(selectedText);
+
+  var hiddenInput = document.createElement('input');
+  hiddenInput.type = 'hidden';
+  hiddenInput.name = propName(element.label);
+  hiddenInput.value = '';
+
+  var select = document.createElement('select');
+  select.className = 'cap-select cap-color-dropdown-select';
+
+  var defaultOpt = document.createElement('option');
+  defaultOpt.value = '';
+  defaultOpt.textContent = '-- Select ' + element.label + ' --';
+  select.appendChild(defaultOpt);
+
+  choices.forEach(function(opt) {
+    var option = document.createElement('option');
+    option.value = opt.value || opt.label;
+    option.textContent = getOptionLabel(opt);
+    option.setAttribute('data-price', getOptionPriceCents(opt));
+    if (isDefault(opt)) option.selected = true;
+    select.appendChild(option);
+  });
+
+  var optionsList = document.createElement('div');
+  optionsList.className = 'cap-color-dropdown-list';
+  optionsList.style.display = 'none';
+
+  choices.forEach(function(opt) {
+    var item = document.createElement('div');
+    item.className = 'cap-color-dropdown-item';
+
+    var colorVal = opt.color || opt.value || '#ccc';
+    var thumb = document.createElement('div');
+    thumb.className = 'cap-color-dropdown-option-color';
+    thumb.style.backgroundColor = colorVal;
+    item.appendChild(thumb);
+
+    var label = document.createElement('span');
+    label.textContent = getOptionLabel(opt);
+    item.setAttribute('data-price', getOptionPriceCents(opt));
+    item.appendChild(label);
+
+    item.addEventListener('click', function() {
+      hiddenInput.value = opt.value || opt.label;
+      select.value = opt.value || opt.label;
+      selectedText.textContent = getOptionLabel(opt);
+      selectedThumb.style.backgroundColor = colorVal;
+      selectedThumb.style.display = 'inline-block';
+      optionsList.style.display = 'none';
+      hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+      hiddenInput.dispatchEvent(new Event('input', { bubbles: true }));
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      updateTotalPrice();
+    });
+
+    if (isDefault(opt)) {
+      hiddenInput.value = opt.value || opt.label;
+      selectedText.textContent = getOptionLabel(opt);
+      selectedThumb.style.backgroundColor = colorVal;
+      selectedThumb.style.display = 'inline-block';
+    }
+
+    optionsList.appendChild(item);
+  });
+
+  var dropdownWrap = document.createElement('div');
+  dropdownWrap.className = 'cap-color-dropdown-wrap';
+
+  selectedDisplay.addEventListener('click', function() {
+    optionsList.style.display = optionsList.style.display === 'none' ? 'block' : 'none';
+  });
+
+  document.addEventListener('click', function(e) {
+    if (!group.contains(e.target)) {
+      optionsList.style.display = 'none';
+    }
+  });
+
+  dropdownWrap.appendChild(selectedDisplay);
+  dropdownWrap.appendChild(optionsList);
+
+  group.appendChild(hiddenInput);
+  group.appendChild(select);
+  group.appendChild(dropdownWrap);
+  group.appendChild(createErrorMsg());
+  return group;
+}
+
+function renderSwitch(element) {
+  var group = createGroup(element);
+  var config = parseConfig(element.config);
+  var defaultValue = config.defaultValue === true || String(config.defaultValue) === 'true';
+
+  var hiddenInput = document.createElement('input');
+  hiddenInput.type = 'hidden';
+  hiddenInput.name = propName(element.label);
+  hiddenInput.value = defaultValue ? 'true' : 'false';
+
+  var wrap = document.createElement('div');
+  wrap.className = 'cap-switch-wrap';
+  wrap.style.display = 'flex';
+  wrap.style.alignItems = 'center';
+  wrap.style.gap = '8px';
+
+  var toggle = document.createElement('div');
+  toggle.className = 'cap-switch-toggle';
+  toggle.style.cssText = [
+    'width:40px',
+    'height:22px',
+    'border-radius:11px',
+    'background-color:' + (defaultValue ? '#2563eb' : '#ccc'),
+    'position:relative',
+    'cursor:pointer',
+    'transition:background-color 0.2s'
+  ].join(';');
+
+  var handle = document.createElement('div');
+  handle.style.cssText = [
+    'width:18px',
+    'height:18px',
+    'border-radius:50%',
+    'background-color:white',
+    'position:absolute',
+    'top:2px',
+    'left:' + (defaultValue ? '20px' : '2px'),
+    'transition:left 0.2s',
+    'box-shadow:0 1px 2px rgba(0,0,0,0.2)'
+  ].join(';');
+
+  toggle.appendChild(handle);
+  wrap.appendChild(toggle);
+
+  var labelText = document.createElement('span');
+  labelText.textContent = defaultValue ? (config.labelOn || 'ON') : (config.labelOff || 'OFF');
+  wrap.appendChild(labelText);
+
+  toggle.addEventListener('click', function() {
+    var isTrue = hiddenInput.value === 'true';
+    if (isTrue) {
+      hiddenInput.value = 'false';
+      toggle.style.backgroundColor = '#ccc';
+      handle.style.left = '2px';
+      labelText.textContent = config.labelOff || 'OFF';
+    } else {
+      hiddenInput.value = 'true';
+      toggle.style.backgroundColor = '#2563eb';
+      handle.style.left = '20px';
+      labelText.textContent = config.labelOn || 'ON';
+    }
+    hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+    hiddenInput.dispatchEvent(new Event('input', { bubbles: true }));
+    updateTotalPrice();
+  });
+
+  group.appendChild(hiddenInput);
+  group.appendChild(wrap);
+  return group;
+}
+
+
+function renderImageDropdown(element) {
+  var group = createGroup(element);
+  var config = parseConfig(element.config);
+  var choices = getChoices(config);
+
+  var hasExplicitDefault = false;
+  for (var idx = 0; idx < choices.length; idx++) {
+    if (isDefault(choices[idx])) {
+      hasExplicitDefault = true;
+      break;
+    }
+  }
+  if (!hasExplicitDefault && choices.length > 0) {
+    choices[0].default = true;
+  }
+
+  var layoutWrap = document.createElement('div');
+  layoutWrap.className = 'cap-image-dropdown-layout';
+
+  var imgPreview = document.createElement('img');
+  imgPreview.className = 'cap-image-dropdown-left-preview';
+  imgPreview.style.display = 'none';
+  layoutWrap.appendChild(imgPreview);
+
+  var dropdownWrap = document.createElement('div');
+  dropdownWrap.className = 'cap-image-dropdown-right-wrap';
+
+  var selectedDisplay = document.createElement('div');
+  selectedDisplay.className = 'cap-image-dropdown-selected';
+
+  var selectedText = document.createElement('span');
+  selectedText.textContent = '-- Select ' + element.label + ' --';
+  selectedDisplay.appendChild(selectedText);
+
+  var hiddenInput = document.createElement('input');
+  hiddenInput.type = 'hidden';
+  hiddenInput.name = propName(element.label);
+  hiddenInput.value = '';
+
+  var select = document.createElement('select');
+  select.className = 'cap-select cap-image-dropdown-select';
+
+  var defaultOpt = document.createElement('option');
+  defaultOpt.value = '';
+  defaultOpt.textContent = '-- Select ' + element.label + ' --';
+  select.appendChild(defaultOpt);
+
+  choices.forEach(function(opt) {
+    var option = document.createElement('option');
+    option.value = opt.value || opt.label;
+    option.textContent = getOptionLabel(opt);
+    option.setAttribute('data-price', getOptionPriceCents(opt));
+    if (isDefault(opt)) option.selected = true;
+    select.appendChild(option);
+  });
+
+  var optionsList = document.createElement('div');
+  optionsList.className = 'cap-image-dropdown-list';
+  optionsList.style.display = 'none';
+
+  choices.forEach(function(opt) {
+    var item = document.createElement('div');
+    item.className = 'cap-image-dropdown-item';
+
+    if (opt.image) {
+      var img = document.createElement('img');
+      img.src = opt.image;
+      img.alt = opt.label;
+      img.className = 'cap-image-dropdown-option-img';
+      item.appendChild(img);
+    }
+
+    var label = document.createElement('span');
+    label.textContent = getOptionLabel(opt);
+    item.setAttribute('data-price', getOptionPriceCents(opt));
+    item.appendChild(label);
+
+    item.addEventListener('click', function() {
+      hiddenInput.value = opt.value || opt.label;
+      select.value = opt.value || opt.label;
+      selectedText.textContent = getOptionLabel(opt);
+      if (opt.image) {
+        imgPreview.src = opt.image;
+        imgPreview.style.display = 'inline-block';
+      } else {
+        imgPreview.style.display = 'none';
+      }
+      optionsList.style.display = 'none';
+      hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+      hiddenInput.dispatchEvent(new Event('input', { bubbles: true }));
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      updateTotalPrice();
+    });
+
+    if (isDefault(opt)) {
+      hiddenInput.value = opt.value || opt.label;
+      selectedText.textContent = getOptionLabel(opt);
+      if (opt.image) {
+        imgPreview.src = opt.image;
+        imgPreview.style.display = 'inline-block';
+      }
+    }
+
+    optionsList.appendChild(item);
+  });
+
+  selectedDisplay.addEventListener('click', function() {
+    optionsList.style.display = optionsList.style.display === 'none' ? 'block' : 'none';
+  });
+
+  document.addEventListener('click', function(e) {
+    if (!group.contains(e.target)) {
+      optionsList.style.display = 'none';
+    }
+  });
+
+  dropdownWrap.appendChild(selectedDisplay);
+  dropdownWrap.appendChild(optionsList);
+  layoutWrap.appendChild(dropdownWrap);
+
+  group.appendChild(hiddenInput);
+  group.appendChild(select);
+  group.appendChild(layoutWrap);
+  group.appendChild(createErrorMsg());
+  return group;
+}
+
+function renderRadio(element) {
+  var group = createGroup(element);
+  var config = parseConfig(element.config);
+  var choices = getChoices(config);
+
+  var hiddenInput = document.createElement('input');
+  hiddenInput.type = 'hidden';
+  hiddenInput.name = propName(element.label);
+  hiddenInput.value = '';
+
+  var wrap = document.createElement('div');
+  wrap.className = 'cap-radio-group';
+
+  choices.forEach(function(opt) {
+    var label = document.createElement('label');
+    label.className = 'cap-radio-option';
+
+    var input = document.createElement('input');
+    input.type = 'radio';
+    input.name = '_cap_radio_' + element.label;
+    input.value = opt.value || opt.label;
+    input.setAttribute('data-price', getOptionPriceCents(opt));
+
+    if (isDefault(opt)) {
+      input.checked = true;
+      hiddenInput.value = input.value;
+    }
+
+    input.addEventListener('change', function() {
+      hiddenInput.value = input.value;
+      hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+      hiddenInput.dispatchEvent(new Event('input', { bubbles: true }));
+      updateTotalPrice();
+    });
+
+    label.appendChild(input);
+    label.appendChild(document.createTextNode(' ' + getOptionLabel(opt)));
+    wrap.appendChild(label);
+  });
+
+  group.appendChild(hiddenInput);
+  group.appendChild(wrap);
+  group.appendChild(createErrorMsg());
+  return group;
+}
+
+function renderCheckbox(element) {
+  var group = createGroup(element);
+  var config = parseConfig(element.config);
+  var choices = getChoices(config);
+
+  var hiddenInput = document.createElement('input');
+  hiddenInput.type = 'hidden';
+  hiddenInput.name = propName(element.label);
+  hiddenInput.value = '';
+
+  var wrap = document.createElement('div');
+  wrap.className = 'cap-checkbox-group';
+  
+  var defaultValues = [];
+
+  choices.forEach(function(opt) {
+    var label = document.createElement('label');
+    label.className = 'cap-checkbox-option';
+
+    var input = document.createElement('input');
+    input.type = 'checkbox';
+    input.value = opt.value || opt.label;
+    input.setAttribute('data-price', getOptionPriceCents(opt));
+    
+    if (isDefault(opt)) {
+      input.checked = true;
+      defaultValues.push(input.value);
+    }
+    
+    input.addEventListener('change', function() {
+      var checkedValues = [];
+      wrap.querySelectorAll('input[type="checkbox"]:checked').forEach(function(cb) {
+        checkedValues.push(cb.value);
+      });
+      hiddenInput.value = checkedValues.join(', ');
+      hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+      hiddenInput.dispatchEvent(new Event('input', { bubbles: true }));
+      updateTotalPrice();
+    });
+
+    label.appendChild(input);
+    label.appendChild(document.createTextNode(' ' + getOptionLabel(opt)));
+    wrap.appendChild(label);
+  });
+  
+  if (defaultValues.length > 0) {
+    hiddenInput.value = defaultValues.join(', ');
+  }
+
+  group.appendChild(hiddenInput);
+  group.appendChild(wrap);
+  group.appendChild(createErrorMsg());
+  return group;
+}
+
+function renderButtonSwatch(element) {
+  var group = createGroup(element);
+  var config = parseConfig(element.config);
+  var choices = getChoices(config);
+
+  var hiddenInput = document.createElement('input');
+  hiddenInput.type = 'hidden';
+  hiddenInput.name = propName(element.label);
+  hiddenInput.value = '';
+
+  var wrap = document.createElement('div');
+  wrap.className = 'cap-swatch-group';
+
+  choices.forEach(function(opt) {
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'cap-button-swatch';
+    btn.textContent = getOptionLabel(opt);
+    btn.setAttribute('data-price', getOptionPriceCents(opt));
+
+    if (isDefault(opt)) {
+      btn.classList.add('cap-selected');
+      hiddenInput.value = opt.value || opt.label;
+    }
+
+    btn.addEventListener('click', function() {
+      wrap.querySelectorAll('.cap-button-swatch').forEach(function(b) { b.classList.remove('cap-selected'); });
+      btn.classList.add('cap-selected');
+      hiddenInput.value = opt.value || opt.label;
+      hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+      hiddenInput.dispatchEvent(new Event('input', { bubbles: true }));
+      updateTotalPrice();
+    });
+
+    wrap.appendChild(btn);
+  });
+
+  group.appendChild(hiddenInput);
+  group.appendChild(wrap);
+  group.appendChild(createErrorMsg());
+  return group;
+}
+
+function renderColorSwatch(element) {
+  var group = createGroup(element);
+  var config = parseConfig(element.config);
+  var choices = getChoices(config);
+
+  var hiddenInput = document.createElement('input');
+  hiddenInput.type = 'hidden';
+  hiddenInput.name = propName(element.label);
+  hiddenInput.value = '';
+
+  var wrap = document.createElement('div');
+  wrap.className = 'cap-swatch-group';
+
+  var textDisplay = document.createElement('div');
+  textDisplay.className = 'cap-help-text';
+  textDisplay.style.marginTop = '4px';
+
+  choices.forEach(function(opt) {
+    var swatch = document.createElement('span');
+    swatch.className = 'cap-color-swatch';
+    swatch.style.backgroundColor = opt.color || opt.value || '#ccc';
+    swatch.title = opt.label;
+    swatch.setAttribute('data-price', getOptionPriceCents(opt));
+
+    if (isDefault(opt)) {
+      swatch.classList.add('cap-selected');
+      hiddenInput.value = opt.value || opt.label;
+      textDisplay.textContent = getOptionLabel(opt);
+    }
+
+    swatch.addEventListener('click', function() {
+      wrap.querySelectorAll('.cap-color-swatch').forEach(function(s) { s.classList.remove('cap-selected'); });
+      swatch.classList.add('cap-selected');
+      hiddenInput.value = opt.value || opt.label;
+      textDisplay.textContent = getOptionLabel(opt);
+      hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+      hiddenInput.dispatchEvent(new Event('input', { bubbles: true }));
+      updateTotalPrice();
+    });
+
+    wrap.appendChild(swatch);
+  });
+
+  group.appendChild(hiddenInput);
+  group.appendChild(wrap);
+  group.appendChild(textDisplay);
+  group.appendChild(createErrorMsg());
+  return group;
+}
+
+function renderImageSwatch(element) {
+  var group = createGroup(element);
+  var config = parseConfig(element.config);
+  var choices = getChoices(config);
+
+  var hiddenInput = document.createElement('input');
+  hiddenInput.type = 'hidden';
+  hiddenInput.name = propName(element.label);
+  hiddenInput.value = '';
+
+  var wrap = document.createElement('div');
+  wrap.className = 'cap-swatch-group';
+
+  var textDisplay = document.createElement('div');
+  textDisplay.className = 'cap-help-text';
+  textDisplay.style.marginTop = '4px';
+
+  choices.forEach(function(opt) {
+    var swatch = document.createElement('img');
+    swatch.className = 'cap-image-swatch';
+    swatch.src = opt.image || '';
+    swatch.alt = opt.label;
+    swatch.title = opt.label;
+    swatch.setAttribute('data-price', getOptionPriceCents(opt));
+
+    if (isDefault(opt)) {
+      swatch.classList.add('cap-selected');
+      hiddenInput.value = opt.value || opt.label;
+      textDisplay.textContent = getOptionLabel(opt);
+    }
+
+    swatch.addEventListener('click', function() {
+      wrap.querySelectorAll('.cap-image-swatch').forEach(function(s) { s.classList.remove('cap-selected'); });
+      swatch.classList.add('cap-selected');
+      hiddenInput.value = opt.value || opt.label;
+      textDisplay.textContent = getOptionLabel(opt);
+      hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+      hiddenInput.dispatchEvent(new Event('input', { bubbles: true }));
+      updateTotalPrice();
+    });
+
+    wrap.appendChild(swatch);
+  });
+
+  group.appendChild(hiddenInput);
+  group.appendChild(wrap);
+  group.appendChild(textDisplay);
+  group.appendChild(createErrorMsg());
+  return group;
+}
+
+/* ─── Static Element Renderers ───────────────────────────────── */
+
+function renderHeading(element) {
+  var div = document.createElement('div');
+  div.className = 'cap-option-group';
+  div.setAttribute('data-id', element.id || '');
+  div.setAttribute('data-type', element.type);
+  div.setAttribute('data-required', 'false');
+  div._element = element;
+
+  var config = parseConfig(element.config);
+  var h = document.createElement('div');
+  h.className = 'cap-heading';
+  h.textContent = config.content || element.label;
+  if (config.align) h.style.textAlign = config.align;
+  if (config.fontSize) h.style.fontSize = config.fontSize + 'px';
+  if (config.fontWeight) h.style.fontWeight = config.fontWeight;
+  div.appendChild(h);
+  return div;
+}
+
+function renderDivider(element) {
+  var div = document.createElement('div');
+  div.className = 'cap-option-group';
+  if (element) {
+    div.setAttribute('data-id', element.id || '');
+    div.setAttribute('data-type', element.type);
+    div.setAttribute('data-required', 'false');
+    div._element = element;
+  }
+  var hr = document.createElement('hr');
+  hr.className = 'cap-divider';
+  div.appendChild(hr);
+  return div;
+}
+
+function renderSpacing(element) {
+  var config = parseConfig(element.config);
+  var div = document.createElement('div');
+  div.className = 'cap-option-group';
+  div.setAttribute('data-id', element.id || '');
+  div.setAttribute('data-type', element.type);
+  div.setAttribute('data-required', 'false');
+  div._element = element;
+
+  var space = document.createElement('div');
+  space.style.minHeight = (config.height || 20) + 'px';
+  space.style.display = 'block';
+  div.appendChild(space);
+  return div;
+}
+
+function renderParagraph(element) {
+  var div = document.createElement('div');
+  div.className = 'cap-option-group';
+  div.setAttribute('data-id', element.id || '');
+  div.setAttribute('data-type', element.type);
+  div.setAttribute('data-required', 'false');
+  div._element = element;
+
+  var config = parseConfig(element.config);
+  var p = document.createElement('p');
+  p.className = 'cap-paragraph';
+  p.textContent = config.content || element.subtext || element.label;
+  div.appendChild(p);
+  return div;
+}
+
+function renderHTML(element) {
+  var config = parseConfig(element.config);
+  var div = document.createElement('div');
+  div.className = 'cap-option-group';
+  div.setAttribute('data-id', element.id || '');
+  div.setAttribute('data-type', element.type);
+  div.setAttribute('data-required', 'false');
+  div._element = element;
+
+  var wrap = document.createElement('div');
+  wrap.innerHTML = config.content || '';
+  div.appendChild(wrap);
+  return div;
+}
+
+/**
+ * Renders a Pop-up Modal / Size Chart element.
+ * Shows as a clickable link; clicking opens a modal overlay.
+ * Config: { triggerText, title, content (HTML) }
+ */
+function renderPopupModal(element) {
+  var config = parseConfig(element.config);
+  var triggerText = config.triggerText || element.label;
+  var modalTitle  = config.title || element.label || 'Details';
+  var modalContent = config.content || '';
+
+  var wrap = document.createElement('div');
+  wrap.className = 'cap-option-group';
+  wrap.setAttribute('data-id', element.id || '');
+  wrap.setAttribute('data-type', element.type);
+  wrap.setAttribute('data-required', 'false');
+  wrap._element = element;
+
+  /* Trigger link — inline styles ensure theme CSS cannot override */
+  var link = document.createElement('a');
+  link.href = '#';
+  link.textContent = triggerText + ' \u2197';
+  link.style.cssText = [
+    'color:#2563eb',
+    'text-decoration:underline',
+    'cursor:pointer',
+    'font-size:14px',
+    'display:inline-block',
+    'background:none',
+    'border:none',
+    'padding:0',
+    'margin:0',
+    'font-family:inherit',
+    'font-weight:normal'
+  ].join(';');
+
+  /* Full-screen overlay appended to body to escape overflow:hidden */
+  var overlay = document.createElement('div');
+  overlay.style.cssText = [
+    'display:none',
+    'position:fixed',
+    'top:0','left:0',
+    'width:100%','height:100%',
+    'background:rgba(0,0,0,0.55)',
+    'z-index:999999',
+    'justify-content:center',
+    'align-items:center'
+  ].join(';');
+
+  var modal = document.createElement('div');
+  modal.style.cssText = [
+    'background:white',
+    'border-radius:8px',
+    'padding:24px',
+    'max-width:560px',
+    'width:90%',
+    'max-height:80vh',
+    'overflow-y:auto',
+    'position:relative',
+    'box-shadow:0 20px 60px rgba(0,0,0,0.3)',
+    'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif',
+    'font-size:14px',
+    'color:#111827',
+    'line-height:1.6'
+  ].join(';');
+
+  var header = document.createElement('div');
+  header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid #e5e7eb;';
+
+  var titleEl = document.createElement('div');
+  titleEl.textContent = modalTitle;
+  titleEl.style.cssText = 'margin:0;font-size:18px;font-weight:bold;color:#111827;';
+
+  var closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
+  closeBtn.textContent = '\u2715';
+  closeBtn.style.cssText = 'background:none;border:none;cursor:pointer;font-size:20px;color:#6b7280;padding:0 4px;line-height:1;flex-shrink:0;';
+
+  header.appendChild(titleEl);
+  header.appendChild(closeBtn);
+
+  var body = document.createElement('div');
+  body.style.cssText = 'font-size:14px;color:#374151;line-height:1.7;';
+  body.innerHTML = modalContent || '<p>No content provided.</p>';
+
+  modal.appendChild(header);
+  modal.appendChild(body);
+  overlay.appendChild(modal);
+
+  function openModal(e) {
+    if (e && e.preventDefault) e.preventDefault();
+    overlay.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+  }
+  function closeModal() {
+    overlay.style.display = 'none';
+    document.body.style.overflow = '';
+  }
+
+  link.addEventListener('click', openModal);
+  closeBtn.addEventListener('click', closeModal);
+  overlay.addEventListener('click', function(e) { if (e.target === overlay) closeModal(); });
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && overlay.style.display === 'flex') closeModal();
+  });
+
+  wrap.appendChild(link);
+  document.body.appendChild(overlay);
+  return wrap;
+}
+
+/* ─── Storefront Conditional Logic Engine ────────────────────── */
+
+function evaluateStorefrontConditions() {
+  var groups = document.querySelectorAll('.cap-options-wrapper .cap-option-group');
+  if (groups.length === 0) return;
+
+  // 1. Build a map of element values & collect all push rules from other elements
+  var valMap = {};
+  var allPushRules = [];
+  groups.forEach(function(group) {
+    var id = group.getAttribute('data-id');
+    if (!id) return;
+    valMap[id] = getElementValue(group);
+
+    var element = group._element;
+    if (element && element.config && element.config.targetOtherFields && element.config.pushRules) {
+      element.config.pushRules.forEach(function(rule) {
+        if (rule.targetElementId) {
+          allPushRules.push({
+            sourceElementId: id,
+            targetElementId: rule.targetElementId,
+            value: rule.value
+          });
+        }
+      });
+    }
+  });
+
+  // 2. Evaluate conditions and push rules for each group
+  groups.forEach(function(group) {
+    var element = group._element;
+    if (!element) return;
+
+    var id = group.getAttribute('data-id');
+    var config = element.config || {};
+
+    // Evaluate own conditional logic conditions (pull rules)
+    var pullResult = true;
+    if (config.conditionalLogic && config.conditions && config.conditions.length > 0) {
+      var conditions = config.conditions;
+      var logicGate = conditions[0].logicGate || 'and';
+      var isMatch = (logicGate === 'and');
+
+      for (var i = 0; i < conditions.length; i++) {
+        var cond = conditions[i];
+        var sourceId = cond.sourceElementId;
+        var operator = cond.operator;
+        var targetVal = cond.value;
+
+        var currentVal = valMap[sourceId];
+        if (currentVal === undefined) currentVal = '';
+
+        var condPassed = false;
+
+        if (Array.isArray(currentVal)) {
+          if (operator === 'equals' || operator === 'contains') {
+            condPassed = currentVal.indexOf(targetVal) !== -1;
+          } else if (operator === 'not_equals' || operator === 'not_contains') {
+            condPassed = currentVal.indexOf(targetVal) === -1;
+          } else if (operator === 'is_empty') {
+            condPassed = currentVal.length === 0;
+          } else if (operator === 'is_not_empty') {
+            condPassed = currentVal.length > 0;
+          }
+        } else {
+          var currentStr = String(currentVal);
+          var targetStr = String(targetVal);
+
+          switch (operator) {
+            case 'equals':
+              condPassed = (currentStr === targetStr);
+              break;
+            case 'not_equals':
+              condPassed = (currentStr !== targetStr);
+              break;
+            case 'contains':
+              condPassed = (currentStr.indexOf(targetStr) !== -1);
+              break;
+            case 'not_contains':
+              condPassed = (currentStr.indexOf(targetStr) === -1);
+              break;
+            case 'is_empty':
+              condPassed = (!currentStr || currentStr.trim() === '');
+              break;
+            case 'is_not_empty':
+              condPassed = (currentStr && currentStr.trim() !== '');
+              break;
+            case 'greater_than':
+              condPassed = (parseFloat(currentStr) > parseFloat(targetStr));
+              break;
+            case 'less_than':
+              condPassed = (parseFloat(currentStr) < parseFloat(targetStr));
+              break;
+            default:
+              condPassed = (currentStr === targetStr);
+          }
+        }
+
+        if (logicGate === 'and') {
+          isMatch = isMatch && condPassed;
+        } else {
+          isMatch = isMatch || condPassed;
+        }
+      }
+
+      var action = conditions[0].action || 'show';
+      pullResult = (action === 'show') ? isMatch : !isMatch;
+    }
+
+    // Evaluate push rules targeting this element
+    var pushRulesTargetingMe = allPushRules.filter(function(pr) {
+      return pr.targetElementId === id;
+    });
+
+    var pushResult = true;
+    if (pushRulesTargetingMe.length > 0) {
+      pushResult = pushRulesTargetingMe.some(function(pr) {
+        var sourceVal = valMap[pr.sourceElementId];
+        if (sourceVal === undefined) return false;
+        if (Array.isArray(sourceVal)) {
+          for (var j = 0; j < sourceVal.length; j++) {
+            if (String(sourceVal[j]) === String(pr.value)) return true;
+          }
+          return false;
+        }
+        return String(sourceVal) === String(pr.value);
+      });
+    }
+
+    // Combine both conditional logic and push rules (both must allow it to show)
+    var shouldShow = pullResult && pushResult;
+
+    if (shouldShow) {
+      group.style.display = '';
+      enableGroupInputs(group, true);
+    } else {
+      group.style.display = 'none';
+      enableGroupInputs(group, false);
+    }
+  });
+}
+
+function getElementValue(group) {
+  if (group.style.display === 'none') {
+    var type = group.getAttribute('data-type') || '';
+    if (type.toLowerCase() === 'checkbox') return [];
+    return '';
+  }
+
+  var element = group._element;
+  if (!element) return '';
+  
+  var choices = (element.config && getChoices(element.config)) || [];
+  var match;
+  var idx;
+
+  // 1. Checkboxes
+  var checkboxes = group.querySelectorAll('input[type="checkbox"]');
+  if (checkboxes.length > 0) {
+    var checkedIds = [];
+    checkboxes.forEach(function(cb) {
+      if (cb.checked) {
+        match = null;
+        for (idx = 0; idx < choices.length; idx++) {
+          if ((choices[idx].value || choices[idx].label) === cb.value) {
+            match = choices[idx];
+            break;
+          }
+        }
+        checkedIds.push(match ? (match.id || match.value || match.label) : cb.value);
+      }
+    });
+    return checkedIds;
+  }
+
+  // 2. Radios
+  var radios = group.querySelectorAll('input[type="radio"]');
+  if (radios.length > 0) {
+    var checkedRadio = group.querySelector('input[type="radio"]:checked');
+    if (checkedRadio) {
+      match = null;
+      for (idx = 0; idx < choices.length; idx++) {
+        if ((choices[idx].value || choices[idx].label) === checkedRadio.value) {
+          match = choices[idx];
+          break;
+        }
+      }
+      return match ? (match.id || match.value || match.label) : checkedRadio.value;
+    }
+    return '';
+  }
+
+  // 3. Select Dropdowns
+  var select = group.querySelector('select');
+  if (select) {
+    if (select.selectedIndex >= 0) {
+      var optVal = select.options[select.selectedIndex].value;
+      match = null;
+      for (idx = 0; idx < choices.length; idx++) {
+        if ((choices[idx].value || choices[idx].label) === optVal) {
+          match = choices[idx];
+          break;
+        }
+      }
+      return match ? (match.id || match.value || match.label) : optVal;
+    }
+    return '';
+  }
+
+  // 4. Hidden Inputs
+  var hidden = group.querySelector('input[type="hidden"]');
+  if (hidden) {
+    var val = hidden.value;
+    match = null;
+    for (idx = 0; idx < choices.length; idx++) {
+      if ((choices[idx].value || choices[idx].label) === val) {
+        match = choices[idx];
+        break;
+      }
+    }
+    return match ? (match.id || match.value || match.label) : val;
+  }
+
+  // 5. Standard text input/textarea
+  var inp = group.querySelector('input, textarea');
+  if (inp) {
+    return inp.value;
+  }
+
+  return '';
+}
+
+function enableGroupInputs(group, enable) {
+  var inputs = group.querySelectorAll('input, select, textarea');
+  inputs.forEach(function(inp) {
+    inp.disabled = !enable;
+  });
+}
+
+

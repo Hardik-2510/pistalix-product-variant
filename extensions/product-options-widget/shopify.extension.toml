@@ -1,0 +1,7 @@
+api_version = "2024-04"
+
+[[extensions]]
+type = "theme"
+name = "Product Options Widget"
+handle = "product-options-widget"
+uid = "2f1d5c1d-68be-7aba-a19b-cf1726ea4d4a8c51fa99"

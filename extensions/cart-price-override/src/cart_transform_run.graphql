@@ -1,0 +1,17 @@
+query CartTransformRunInput {
+  cart {
+    lines {
+      id
+      quantity
+      finalPrice: attribute(key: "_final_price") {
+        value
+      }
+      cost {
+        amountPerQuantity {
+          amount
+          currencyCode
+        }
+      }
+    }
+  }
+}
