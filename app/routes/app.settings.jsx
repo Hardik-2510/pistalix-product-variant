@@ -1,3 +1,4 @@
+/* eslint-disable no-unused-vars */
 import { useState, useCallback, useRef } from "react";
 import { useLoaderData, useSubmit, useNavigation } from "react-router";
 import { authenticate } from "../shopify.server";
@@ -16,6 +17,11 @@ import {
   ChoiceList,
   TextField,
   AppProvider,
+  Divider,
+  Icon,
+  Banner,
+  RangeSlider,
+  Checkbox,
 } from "@shopify/polaris";
 import english from "@shopify/polaris/locales/en.json";
 import {
@@ -25,7 +31,7 @@ import {
   TextIndentIcon
 } from "@shopify/polaris-icons";
 
-function CustomToggle({ checked, onChange, activeColor = "#2c2e2f", inactiveColor = "#c4cdd5" }) {
+function CustomToggle({ checked, onChange, activeColor = "#303030", inactiveColor = "#c4cdd5" }) {
   return (
     <div 
       onClick={() => onChange(!checked)}
@@ -35,22 +41,25 @@ function CustomToggle({ checked, onChange, activeColor = "#2c2e2f", inactiveColo
           onChange(!checked);
         }
       }}
-      role="button"
+      role="switch"
+      aria-checked={checked}
       tabIndex={0}
       style={{
-        width: "40px", height: "24px", borderRadius: "12px",
+        width: "44px", height: "24px", borderRadius: "12px",
         background: checked ? activeColor : inactiveColor,
         position: "relative", cursor: "pointer",
-        transition: "background 0.2s ease"
+        transition: "background 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
+        flexShrink: 0,
+        outline: "none",
       }}
     >
       <div style={{
         width: "18px", height: "18px", borderRadius: "50%",
         background: "white",
         position: "absolute", top: "3px",
-        left: checked ? "19px" : "3px",
-        transition: "left 0.2s ease",
-        boxShadow: "0 1px 3px rgba(0,0,0,0.3)"
+        left: checked ? "23px" : "3px",
+        transition: "left 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s ease",
+        boxShadow: "0 1px 4px rgba(0,0,0,0.2), 0 0 0 1px rgba(0,0,0,0.04)"
       }} />
     </div>
   );
@@ -59,21 +68,27 @@ function CustomToggle({ checked, onChange, activeColor = "#2c2e2f", inactiveColo
 
 function ColorSwatchItem({ label, value, onChange }) {
   return (
-    <Box>
+    <Box padding="150" borderRadius="200">
       <InlineStack align="start" blockAlign="center" gap="300">
         <div style={{ position: 'relative' }}>
           <div style={{
-            width: '40px',
-            height: '40px',
+            width: '36px',
+            height: '36px',
             borderRadius: '50%',
             backgroundColor: value,
-            border: '1px solid var(--p-color-border-strong)',
-            cursor: 'pointer'
-          }} />
+            border: '2px solid var(--p-color-border)',
+            cursor: 'pointer',
+            transition: 'transform 0.15s ease, box-shadow 0.15s ease',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.1)'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.08)'; }}
+          />
           <input 
             type="color" 
             value={value} 
             onChange={(e) => onChange(e.target.value)}
+            aria-label={`Pick color for ${label}`}
             style={{
               opacity: 0,
               position: 'absolute',
@@ -82,9 +97,11 @@ function ColorSwatchItem({ label, value, onChange }) {
             }}
           />
         </div>
-        <BlockStack gap="0">
-          <Text as="span">{label}</Text>
-          <Text as="p" tone="subdued">{value}</Text>
+        <BlockStack gap="050">
+          <Text as="span" variant="bodyMd">{label}</Text>
+          <Text as="p" tone="subdued" variant="bodySm">
+            <span style={{ fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace', fontSize: '12px', letterSpacing: '0.02em' }}>{value}</span>
+          </Text>
         </BlockStack>
       </InlineStack>
     </Box>
@@ -94,10 +111,12 @@ function ColorSwatchItem({ label, value, onChange }) {
 function TranslationRow({ english }) {
   return (
     <>
-      <Box padding="300" borderBlockEndWidth="1" borderColor="border">
-        <Text as="p" tone="subdued">{english}</Text>
+      <Box padding="300" borderBlockEndWidth="025" borderColor="border" minHeight="52px">
+        <div style={{ display: 'flex', alignItems: 'center', minHeight: '32px' }}>
+          <Text as="p" tone="subdued" variant="bodyMd">{english}</Text>
+        </div>
       </Box>
-      <Box padding="300" borderBlockEndWidth="1" borderColor="border" borderInlineStartWidth="1">
+      <Box padding="300" borderBlockEndWidth="025" borderColor="border" borderInlineStartWidth="025" minHeight="52px">
         <TextField value={english} borderless autoComplete="off" />
       </Box>
     </>
@@ -220,11 +239,41 @@ export default function Settings() {
     buttonTextActive: '#ffffff',
     buttonBackground: '#ffffff',
     buttonBackgroundHover: '#ffffff',
-    buttonBackgroundActive: '#eb1256'
+    buttonBackgroundActive: '#eb1256',
+    swatchBorder: '#dddddd',
+    swatchBorderHover: '#dddddd',
+    swatchBorderActive: '#eb1256',
+    tabTitle: '#71717a',
+    tabTitleActive: '#212B36',
+    tabTitleHover: '#212B36',
+    tabContent: '#212B36',
+    tabBorder: '#e1e1e1',
+    groupLabel: '#121212',
+    groupIcon: '#121212',
+    groupChevron: '#121212'
   });
 
   const handleColorChange = (key, val) => {
     setColors(prev => ({ ...prev, [key]: val }));
+  };
+
+  const [borders, setBorders] = useState(settings.borders || {
+    inputSize: 1, inputRadius: 2,
+    dropdownSize: 1, dropdownRadius: 2,
+    swatchSize: 1, swatchRadius: 2
+  });
+  const handleBorderChange = (key, val) => {
+    setBorders(prev => ({ ...prev, [key]: val }));
+  };
+
+  const [typography, setTypography] = useState(settings.typography || {
+    labelCustom: false, labelFont: "Open Sans", labelSize: 14,
+    mainCustom: false, mainFont: "Open Sans", mainSize: 14,
+    helpCustom: false, helpFont: "Open Sans", helpSize: 14,
+    addonCustom: false, addonFont: "Open Sans", addonSize: 14
+  });
+  const handleTypographyChange = (key, val) => {
+    setTypography(prev => ({ ...prev, [key]: val }));
   };
 
   const [toggleStates, setToggleStates] = useState(settings.toggleStates || {
@@ -313,9 +362,9 @@ export default function Settings() {
   }, []);
 
   const topTabs = [
-    { content: "Settings" },
-    { content: "Translations" },
-    { content: "Theme Setup" },
+    { id: "settings", content: "Settings" },
+    { id: "translations", content: "Translations" },
+    { id: "theme-setup", content: "Theme Setup" },
   ];
 
   const settingsTabs = [
@@ -339,12 +388,14 @@ export default function Settings() {
                 <Box>
                   {settingsTab === 0 && (
                     <BlockStack gap="0">
+                      <Box padding="400" background="bg-surface-secondary" borderBlockEndWidth="025" borderColor="border">
+                        <Text variant="headingSm" as="h3" fontWeight="semibold">Widget Settings</Text>
+                      </Box>
                       <Box padding="400" borderBlockEndWidth="025" borderColor="border">
-                        <Text variant="headingMd" as="h3">Widget Settings</Text>
-                        <BlockStack gap="300">
-                          <Box paddingBlockStart="200" paddingBlockEnd="200">
+                        <BlockStack gap="200">
+                          <Box paddingBlockStart="100" paddingBlockEnd="200">
                             <InlineStack align="space-between" blockAlign="center">
-                              <Text as="p">Position of Widget</Text>
+                              <Text as="p" variant="bodyMd">Position of Widget</Text>
                               <Select 
                                 options={[
                                   "Above product variants",
@@ -362,16 +413,16 @@ export default function Settings() {
                             </InlineStack>
                           </Box>
                           {position.includes("HTML element") && (
-                            <Box paddingBlockStart="200" paddingBlockEnd="200">
+                            <Box paddingBlockStart="100" paddingBlockEnd="200">
                               <InlineStack align="space-between" blockAlign="center">
-                                <Text as="p">Selector of the HTML element</Text>
+                                <Text as="p" variant="bodyMd">Selector of the HTML element</Text>
                                 <TextField value={customSelector} onChange={setCustomSelector} autoComplete="off" />
                               </InlineStack>
                             </Box>
                           )}
-                          <Box paddingBlockStart="200" paddingBlockEnd="200">
+                          <Box paddingBlockStart="100" paddingBlockEnd="200">
                             <InlineStack align="space-between" blockAlign="center">
-                              <Text as="p">Alignment</Text>
+                              <Text as="p" variant="bodyMd">Alignment</Text>
                               <ButtonGroup segmented>
                                 <Button icon={TextAlignLeftIcon} pressed={alignment === "left"} onClick={() => setAlignment("left")} />
                                 <Button icon={TextAlignCenterIcon} pressed={alignment === "center"} onClick={() => setAlignment("center")} />
@@ -380,55 +431,61 @@ export default function Settings() {
                               </ButtonGroup>
                             </InlineStack>
                           </Box>
-                          <Box paddingBlockStart="200" paddingBlockEnd="200">
+                          <Divider />
+                          <Box paddingBlockStart="100" paddingBlockEnd="200">
                             <InlineStack align="space-between" blockAlign="center">
-                              <Text as="p">Show tooltip when hovering over options</Text>
+                              <Text as="p" variant="bodyMd">Show tooltip when hovering over options</Text>
                               <CustomToggle checked={toggleStates.tooltip} onChange={() => handleToggle("tooltip")} />
                             </InlineStack>
                           </Box>
-                          <Box paddingBlockStart="200" paddingBlockEnd="200">
+                          <Box paddingBlockStart="100" paddingBlockEnd="200">
                             <InlineStack align="space-between" blockAlign="center">
-                              <Text as="p">Display selected value next to label</Text>
+                              <Text as="p" variant="bodyMd">Display selected value next to label</Text>
                               <CustomToggle checked={toggleStates.displayValue} onChange={() => handleToggle("displayValue")} />
                             </InlineStack>
                           </Box>
-                          <Box paddingBlockStart="200" paddingBlockEnd="200">
+                          <Box paddingBlockStart="100" paddingBlockEnd="200">
                             <InlineStack align="space-between" blockAlign="center">
-                              <Text as="p">Limit widget height (scroll if too long)</Text>
+                              <Text as="p" variant="bodyMd">Limit widget height (scroll if too long)</Text>
                               <CustomToggle checked={toggleStates.limitHeight} onChange={() => handleToggle("limitHeight")} />
                             </InlineStack>
                           </Box>
                         </BlockStack>
                       </Box>
+                      <Box padding="400" background="bg-surface-secondary" borderBlockEndWidth="025" borderColor="border">
+                        <Text variant="headingSm" as="h3" fontWeight="semibold">Collection page</Text>
+                      </Box>
                       <Box padding="400" borderBlockEndWidth="025" borderColor="border">
-                        <Text variant="headingMd" as="h3">Collection page</Text>
-                        <BlockStack gap="300">
-                          <Box paddingBlockStart="200" paddingBlockEnd="200">
+                        <BlockStack gap="200">
+                          <Box paddingBlockStart="100" paddingBlockEnd="200">
                             <InlineStack align="space-between" blockAlign="center">
-                              <Text as="p">Show options on Quickview popups ⓘ</Text>
+                              <Text as="p" variant="bodyMd">Show options on Quickview popups</Text>
                               <CustomToggle checked={toggleStates.collectionQuickview} onChange={() => handleToggle("collectionQuickview")} />
                             </InlineStack>
                           </Box>
                         </BlockStack>
                       </Box>
+                      <Box padding="400" background="bg-surface-secondary" borderBlockEndWidth="025" borderColor="border">
+                        <Text variant="headingSm" as="h3" fontWeight="semibold">Product page</Text>
+                      </Box>
                       <Box padding="400" borderBlockEndWidth="025" borderColor="border">
-                        <Text variant="headingMd" as="h3">Product page</Text>
-                        <BlockStack gap="300">
-                          <Box paddingBlockStart="200" paddingBlockEnd="200">
+                        <BlockStack gap="200">
+                          <Box paddingBlockStart="100" paddingBlockEnd="200">
                             <InlineStack align="space-between" blockAlign="center">
-                              <Text as="p">Go to cart immediately after adding to cart ⓘ</Text>
+                              <Text as="p" variant="bodyMd">Go to cart immediately after adding to cart</Text>
                               <CustomToggle checked={toggleStates.goToCart} onChange={() => handleToggle("goToCart")} />
                             </InlineStack>
                           </Box>
-                          <Box paddingBlockStart="200" paddingBlockEnd="200">
+                          <Box paddingBlockStart="100" paddingBlockEnd="200">
                             <InlineStack align="space-between" blockAlign="center">
-                              <Text as="p">Auto-scroll to first error message</Text>
+                              <Text as="p" variant="bodyMd">Auto-scroll to first error message</Text>
                               <CustomToggle checked={toggleStates.autoScroll} onChange={() => handleToggle("autoScroll")} />
                             </InlineStack>
                           </Box>
-                          <Box paddingBlockStart="200" paddingBlockEnd="200">
+                          <Divider />
+                          <Box paddingBlockStart="100" paddingBlockEnd="200">
                             <InlineStack align="space-between" blockAlign="center">
-                              <Text as="p">File preview</Text>
+                              <Text as="p" variant="bodyMd">File preview</Text>
                               <Select 
                                 options={[
                                   "Show image if the uploaded file is a photo, otherwise show link",
@@ -441,46 +498,49 @@ export default function Settings() {
                           </Box>
                         </BlockStack>
                       </Box>
+                      <Box padding="400" background="bg-surface-secondary" borderBlockEndWidth="025" borderColor="border">
+                        <Text variant="headingSm" as="h3" fontWeight="semibold">Cart page</Text>
+                      </Box>
                       <Box padding="400" borderBlockEndWidth="025" borderColor="border">
-                        <Text variant="headingMd" as="h3">Cart page</Text>
-                        <BlockStack gap="300">
-                          <Box paddingBlockStart="200" paddingBlockEnd="200">
+                        <BlockStack gap="200">
+                          <Box paddingBlockStart="100" paddingBlockEnd="200">
                             <InlineStack align="space-between" blockAlign="center">
-                              <Text as="p">Hide quantity box and remove button for add-on products ⓘ</Text>
+                              <Text as="p" variant="bodyMd">Hide quantity box and remove button for add-on products</Text>
                               <CustomToggle checked={toggleStates.hideQuantity} onChange={() => handleToggle("hideQuantity")} />
                             </InlineStack>
                           </Box>
-                          <Box paddingBlockStart="200" paddingBlockEnd="200">
+                          <Box paddingBlockStart="100" paddingBlockEnd="200">
                             <InlineStack align="space-between" blockAlign="center">
-                              <Text as="p">Show Edit Options button in cart ⓘ</Text>
+                              <Text as="p" variant="bodyMd">Show Edit Options button in cart</Text>
                               <CustomToggle checked={toggleStates.showEditOptions} onChange={() => handleToggle("showEditOptions")} />
                             </InlineStack>
                           </Box>
-                          
-                          <Box paddingBlockStart="200" paddingBlockEnd="200">
+                          <Divider />
+                          <Box paddingBlockStart="100" paddingBlockEnd="200">
                             <InlineStack align="space-between" blockAlign="center">
-                              <Text as="p" tone="subdued">Personalize preview mode</Text>
+                              <Text as="p" tone="subdued" variant="bodyMd">Personalize preview mode</Text>
                               <ButtonGroup>
                                 <Button disabled>👁️</Button>
                                 <Button disabled>⬇️</Button>
                               </ButtonGroup>
                             </InlineStack>
                           </Box>
-                          
                         </BlockStack>
                       </Box>
+                      <Box padding="400" background="bg-surface-secondary" borderBlockEndWidth="025" borderColor="border">
+                        <Text variant="headingSm" as="h3" fontWeight="semibold">Other pages</Text>
+                      </Box>
                       <Box padding="400" borderBlockEndWidth="025" borderColor="border">
-                        <Text variant="headingMd" as="h3">Other pages</Text>
-                        <BlockStack gap="300">
-                          <Box paddingBlockStart="200" paddingBlockEnd="200">
+                        <BlockStack gap="200">
+                          <Box paddingBlockStart="100" paddingBlockEnd="200">
                             <InlineStack align="space-between" blockAlign="center">
-                              <Text as="p">Show widget on home page (featured product section only) ⓘ</Text>
+                              <Text as="p" variant="bodyMd">Show widget on home page (featured product section only)</Text>
                               <CustomToggle checked={toggleStates.homePageWidget} onChange={() => handleToggle("homePageWidget")} />
                             </InlineStack>
                           </Box>
-                          <Box paddingBlockStart="200" paddingBlockEnd="200">
+                          <Box paddingBlockStart="100" paddingBlockEnd="200">
                             <InlineStack align="space-between" blockAlign="center">
-                              <Text as="p">Show widget on regular page (featured product section only)</Text>
+                              <Text as="p" variant="bodyMd">Show widget on regular page (featured product section only)</Text>
                               <CustomToggle checked={toggleStates.regularPageWidget} onChange={() => handleToggle("regularPageWidget")} />
                             </InlineStack>
                           </Box>
@@ -511,13 +571,13 @@ export default function Settings() {
                   {settingsTab === 1 && (
                     <BlockStack gap="400">
                       <Card padding="0">
-                        <Box padding="400" borderBlockEndWidth="1" borderColor="border">
-                          <Text variant="headingSm" as="h2">Color</Text>
+                        <Box padding="400" background="bg-surface-secondary" borderBlockEndWidth="025" borderColor="border">
+                          <Text variant="headingSm" as="h2" fontWeight="semibold">Color</Text>
                         </Box>
                         <Box padding="400">
                           <BlockStack gap="400">
-                            <Box borderBlockEndWidth="1" borderColor="border" paddingBlockEnd="300">
-                              <Box paddingBlockEnd="200">
+                            <Box paddingBlockEnd="300" borderBlockEndWidth="025" borderColor="border">
+                              <Box paddingBlockEnd="200" paddingBlockStart="100">
                                 <Text variant="headingXs" as="h6" tone="subdued" fontWeight="semibold">General</Text>
                               </Box>
                               <InlineGrid columns={{ xs: 1, md: 2 }} gap="300">
@@ -528,11 +588,10 @@ export default function Settings() {
                                 <ColorSwatchItem label="Total text" value={colors.totalText} onChange={(val) => handleColorChange("totalText", val)} />
                                 <ColorSwatchItem label="Total text money" value={colors.totalTextMoney} onChange={(val) => handleColorChange("totalTextMoney", val)} />
                               </InlineGrid>
-                              
                             </Box>
 
-                            <Box borderBlockEndWidth="1" borderColor="border" paddingBlockEnd="300">
-                              <Box paddingBlockEnd="200">
+                            <Box paddingBlockEnd="300" borderBlockEndWidth="025" borderColor="border">
+                              <Box paddingBlockEnd="200" paddingBlockStart="100">
                                 <Text variant="headingXs" as="h6" tone="subdued" fontWeight="semibold">Single input</Text>
                               </Box>
                               <InlineGrid columns={{ xs: 1, md: 2 }} gap="300">
@@ -545,11 +604,10 @@ export default function Settings() {
                                 <ColorSwatchItem label="Range slider background" value={colors.rangeSliderBackground} onChange={(val) => handleColorChange("rangeSliderBackground", val)} />
                                 <ColorSwatchItem label="Range slider active background" value={colors.rangeSliderActiveBackground} onChange={(val) => handleColorChange("rangeSliderActiveBackground", val)} />
                               </InlineGrid>
-                              
                             </Box>
 
-                            <Box borderBlockEndWidth="1" borderColor="border" paddingBlockEnd="300">
-                              <Box paddingBlockEnd="200">
+                            <Box paddingBlockEnd="300" borderBlockEndWidth="025" borderColor="border">
+                              <Box paddingBlockEnd="200" paddingBlockStart="100">
                                 <Text variant="headingXs" as="h6" tone="subdued" fontWeight="semibold">Choice list</Text>
                               </Box>
                               <InlineGrid columns={{ xs: 1, md: 2 }} gap="300">
@@ -563,11 +621,10 @@ export default function Settings() {
                                 <ColorSwatchItem label="Checkbox & Radio hover" value={colors.checkboxRadioHover} onChange={(val) => handleColorChange("checkboxRadioHover", val)} />
                                 <ColorSwatchItem label="Checkbox & Radio active" value={colors.checkboxRadioActive} onChange={(val) => handleColorChange("checkboxRadioActive", val)} />
                               </InlineGrid>
-                              
                             </Box>
 
-                            <Box paddingBlockEnd="300">
-                              <Box paddingBlockEnd="200">
+                            <Box paddingBlockEnd="300" borderBlockEndWidth="025" borderColor="border">
+                              <Box paddingBlockEnd="200" paddingBlockStart="100">
                                 <Text variant="headingXs" as="h6" tone="subdued" fontWeight="semibold">Swatch</Text>
                               </Box>
                               <InlineGrid columns={{ xs: 1, md: 2 }} gap="300">
@@ -577,9 +634,151 @@ export default function Settings() {
                                 <ColorSwatchItem label="Button background" value={colors.buttonBackground} onChange={(val) => handleColorChange("buttonBackground", val)} />
                                 <ColorSwatchItem label="Button background hover" value={colors.buttonBackgroundHover} onChange={(val) => handleColorChange("buttonBackgroundHover", val)} />
                                 <ColorSwatchItem label="Button background active" value={colors.buttonBackgroundActive} onChange={(val) => handleColorChange("buttonBackgroundActive", val)} />
+                                <ColorSwatchItem label="Swatch border" value={colors.swatchBorder} onChange={(val) => handleColorChange("swatchBorder", val)} />
+                                <ColorSwatchItem label="Swatch border hover" value={colors.swatchBorderHover} onChange={(val) => handleColorChange("swatchBorderHover", val)} />
+                                <ColorSwatchItem label="Swatch border active" value={colors.swatchBorderActive} onChange={(val) => handleColorChange("swatchBorderActive", val)} />
+                              </InlineGrid>
+                            </Box>
+
+                            <Box paddingBlockEnd="300" borderBlockEndWidth="025" borderColor="border">
+                              <Box paddingBlockEnd="200" paddingBlockStart="100">
+                                <Text variant="headingXs" as="h6" tone="subdued" fontWeight="semibold">Tabs</Text>
+                              </Box>
+                              <InlineGrid columns={{ xs: 1, md: 2 }} gap="300">
+                                <ColorSwatchItem label="Tab title" value={colors.tabTitle} onChange={(val) => handleColorChange("tabTitle", val)} />
+                                <ColorSwatchItem label="Tab title active" value={colors.tabTitleActive} onChange={(val) => handleColorChange("tabTitleActive", val)} />
+                                <ColorSwatchItem label="Tab title hover" value={colors.tabTitleHover} onChange={(val) => handleColorChange("tabTitleHover", val)} />
+                                <ColorSwatchItem label="Tab content" value={colors.tabContent} onChange={(val) => handleColorChange("tabContent", val)} />
+                                <ColorSwatchItem label="Tab border" value={colors.tabBorder} onChange={(val) => handleColorChange("tabBorder", val)} />
+                              </InlineGrid>
+                            </Box>
+
+                            <Box paddingBlockEnd="300">
+                              <Box paddingBlockEnd="200" paddingBlockStart="100">
+                                <Text variant="headingXs" as="h6" tone="subdued" fontWeight="semibold">Group</Text>
+                              </Box>
+                              <InlineGrid columns={{ xs: 1, md: 2 }} gap="300">
+                                <ColorSwatchItem label="Group label" value={colors.groupLabel} onChange={(val) => handleColorChange("groupLabel", val)} />
+                                <ColorSwatchItem label="Group icon" value={colors.groupIcon} onChange={(val) => handleColorChange("groupIcon", val)} />
+                                <ColorSwatchItem label="Group chevron" value={colors.groupChevron} onChange={(val) => handleColorChange("groupChevron", val)} />
                               </InlineGrid>
                             </Box>
                           </BlockStack>
+                        </Box>
+                      </Card>
+
+                      {/* Borders */}
+                      <Card padding="0">
+                        <Box padding="400" background="bg-surface-secondary" borderBlockEndWidth="025" borderColor="border">
+                          <Text variant="headingSm" as="h2" fontWeight="semibold">Border</Text>
+                        </Box>
+                        <Box padding="400">
+                          <InlineGrid columns={{ xs: 1, md: 3 }} gap="400">
+                            {/* Input Border */}
+                            <BlockStack gap="300">
+                              <Text variant="headingXs" as="h6" tone="subdued" fontWeight="semibold">Input</Text>
+                              <Box>
+                                <InlineStack align="space-between"><Text as="p">Border size</Text><Text tone="subdued" as="span">{borders.inputSize}px</Text></InlineStack>
+                                <RangeSlider min={0} max={10} value={borders.inputSize} onChange={(val) => handleBorderChange('inputSize', val)} output />
+                              </Box>
+                              <Box>
+                                <InlineStack align="space-between"><Text as="p">Border radius</Text><Text tone="subdued" as="span">{borders.inputRadius}px</Text></InlineStack>
+                                <RangeSlider min={0} max={20} value={borders.inputRadius} onChange={(val) => handleBorderChange('inputRadius', val)} output />
+                              </Box>
+                            </BlockStack>
+                            
+                            {/* Dropdown Border */}
+                            <BlockStack gap="300">
+                              <Text variant="headingXs" as="h6" tone="subdued" fontWeight="semibold">Dropdown</Text>
+                              <Box>
+                                <InlineStack align="space-between"><Text as="p">Border size</Text><Text tone="subdued" as="span">{borders.dropdownSize}px</Text></InlineStack>
+                                <RangeSlider min={0} max={10} value={borders.dropdownSize} onChange={(val) => handleBorderChange('dropdownSize', val)} output />
+                              </Box>
+                              <Box>
+                                <InlineStack align="space-between"><Text as="p">Border radius</Text><Text tone="subdued" as="span">{borders.dropdownRadius}px</Text></InlineStack>
+                                <RangeSlider min={0} max={20} value={borders.dropdownRadius} onChange={(val) => handleBorderChange('dropdownRadius', val)} output />
+                              </Box>
+                            </BlockStack>
+
+                            {/* Swatch Border */}
+                            <BlockStack gap="300">
+                              <Text variant="headingXs" as="h6" tone="subdued" fontWeight="semibold">Swatch</Text>
+                              <Box>
+                                <InlineStack align="space-between"><Text as="p">Border size</Text><Text tone="subdued" as="span">{borders.swatchSize}px</Text></InlineStack>
+                                <RangeSlider min={0} max={10} value={borders.swatchSize} onChange={(val) => handleBorderChange('swatchSize', val)} output />
+                              </Box>
+                              <Box>
+                                <InlineStack align="space-between"><Text as="p">Border radius</Text><Text tone="subdued" as="span">{borders.swatchRadius}px</Text></InlineStack>
+                                <RangeSlider min={0} max={20} value={borders.swatchRadius} onChange={(val) => handleBorderChange('swatchRadius', val)} output />
+                              </Box>
+                            </BlockStack>
+                          </InlineGrid>
+                        </Box>
+                      </Card>
+
+                      {/* Typography */}
+                      <Card padding="0">
+                        <Box padding="400" background="bg-surface-secondary" borderBlockEndWidth="025" borderColor="border">
+                          <Text variant="headingSm" as="h2" fontWeight="semibold">Typography</Text>
+                        </Box>
+                        <Box padding="400">
+                          <InlineGrid columns={{ xs: 1, md: 2 }} gap="400">
+                            {/* Label Text */}
+                            <BlockStack gap="300">
+                              <Text variant="headingXs" as="h6" tone="subdued" fontWeight="semibold">Label text</Text>
+                              <Checkbox label="Use custom font" checked={typography.labelCustom} onChange={(val) => handleTypographyChange('labelCustom', val)} />
+                              <Box>
+                                <Text as="p" paddingBlockEnd="100">Font</Text>
+                                <Select options={["Open Sans", "Inter", "Roboto", "Helvetica"]} value={typography.labelFont} onChange={(val) => handleTypographyChange('labelFont', val)} disabled={!typography.labelCustom} />
+                              </Box>
+                              <Box>
+                                <InlineStack align="space-between"><Text as="p">Base size</Text><Text tone="subdued" as="span">{typography.labelSize}px</Text></InlineStack>
+                                <RangeSlider min={10} max={30} value={typography.labelSize} onChange={(val) => handleTypographyChange('labelSize', val)} output />
+                              </Box>
+                            </BlockStack>
+
+                            {/* Main Text */}
+                            <BlockStack gap="300">
+                              <Text variant="headingXs" as="h6" tone="subdued" fontWeight="semibold">Main text</Text>
+                              <Checkbox label="Use custom font" checked={typography.mainCustom} onChange={(val) => handleTypographyChange('mainCustom', val)} />
+                              <Box>
+                                <Text as="p" paddingBlockEnd="100">Font</Text>
+                                <Select options={["Open Sans", "Inter", "Roboto", "Helvetica"]} value={typography.mainFont} onChange={(val) => handleTypographyChange('mainFont', val)} disabled={!typography.mainCustom} />
+                              </Box>
+                              <Box>
+                                <InlineStack align="space-between"><Text as="p">Base size</Text><Text tone="subdued" as="span">{typography.mainSize}px</Text></InlineStack>
+                                <RangeSlider min={10} max={30} value={typography.mainSize} onChange={(val) => handleTypographyChange('mainSize', val)} output />
+                              </Box>
+                            </BlockStack>
+
+                            {/* Help Text */}
+                            <BlockStack gap="300">
+                              <Text variant="headingXs" as="h6" tone="subdued" fontWeight="semibold">Help text</Text>
+                              <Checkbox label="Use custom font" checked={typography.helpCustom} onChange={(val) => handleTypographyChange('helpCustom', val)} />
+                              <Box>
+                                <Text as="p" paddingBlockEnd="100">Font</Text>
+                                <Select options={["Open Sans", "Inter", "Roboto", "Helvetica"]} value={typography.helpFont} onChange={(val) => handleTypographyChange('helpFont', val)} disabled={!typography.helpCustom} />
+                              </Box>
+                              <Box>
+                                <InlineStack align="space-between"><Text as="p">Base size</Text><Text tone="subdued" as="span">{typography.helpSize}px</Text></InlineStack>
+                                <RangeSlider min={10} max={30} value={typography.helpSize} onChange={(val) => handleTypographyChange('helpSize', val)} output />
+                              </Box>
+                            </BlockStack>
+
+                            {/* Add-on message */}
+                            <BlockStack gap="300">
+                              <Text variant="headingXs" as="h6" tone="subdued" fontWeight="semibold">Add-on message</Text>
+                              <Checkbox label="Use custom font" checked={typography.addonCustom} onChange={(val) => handleTypographyChange('addonCustom', val)} />
+                              <Box>
+                                <Text as="p" paddingBlockEnd="100">Font</Text>
+                                <Select options={["Open Sans", "Inter", "Roboto", "Helvetica"]} value={typography.addonFont} onChange={(val) => handleTypographyChange('addonFont', val)} disabled={!typography.addonCustom} />
+                              </Box>
+                              <Box>
+                                <InlineStack align="space-between"><Text as="p">Base size</Text><Text tone="subdued" as="span">{typography.addonSize}px</Text></InlineStack>
+                                <RangeSlider min={10} max={30} value={typography.addonSize} onChange={(val) => handleTypographyChange('addonSize', val)} output />
+                              </Box>
+                            </BlockStack>
+                          </InlineGrid>
                         </Box>
                       </Card>
                     </BlockStack>
@@ -587,71 +786,75 @@ export default function Settings() {
 
                   {settingsTab === 2 && (
                     <BlockStack gap="0">
-                      <Box padding="400">
-                        <Text variant="headingMd" as="h3">Product page</Text>
-                        <Box paddingBlockStart="400">
-                          <BlockStack gap="300">
-                            <Box paddingBlockStart="200" paddingBlockEnd="200">
-                              <InlineStack align="space-between" blockAlign="center">
-                                <Text as="p">Add-on money format</Text>
-                                <Select 
-                                  options={[
-                                    "Without currency",
-                                    "With currency"
-                                  ]} 
-                                  value={addonMoneyFormat}
-                                  onChange={setAddonMoneyFormat}
-                                />
-                              </InlineStack>
-                            </Box>
-                            
-                            <Box paddingBlockStart="200" paddingBlockEnd="200">
-                              <InlineStack align="space-between" blockAlign="center">
-                                <Text as="p">Add-on label format</Text>
-                                <TextField 
-                                  value={addonLabelFormat}
-                                  onChange={setAddonLabelFormat}
-                                  autoComplete="off"
-                                />
-                              </InlineStack>
-                            </Box>
+                      <Box padding="400" background="bg-surface-secondary" borderBlockEndWidth="025" borderColor="border">
+                        <Text variant="headingSm" as="h3" fontWeight="semibold">Product page add-on settings</Text>
+                      </Box>
+                      <Box padding="400" borderBlockEndWidth="025" borderColor="border">
+                        <BlockStack gap="200">
+                          <Box paddingBlockStart="100" paddingBlockEnd="200">
+                            <Text variant="headingXs" as="h6" tone="subdued" fontWeight="semibold" paddingBlockEnd="200">Display Settings</Text>
+                            <InlineStack align="space-between" blockAlign="center">
+                              <Text as="p" variant="bodyMd">Add-on money format</Text>
+                              <Select 
+                                options={[
+                                  "Without currency",
+                                  "With currency"
+                                ]} 
+                                value={addonMoneyFormat}
+                                onChange={setAddonMoneyFormat}
+                              />
+                            </InlineStack>
+                          </Box>
+                          
+                          <Box paddingBlockStart="100" paddingBlockEnd="200">
+                            <InlineStack align="space-between" blockAlign="center">
+                              <Text as="p" variant="bodyMd">Add-on label format</Text>
+                              <TextField 
+                                value={addonLabelFormat}
+                                onChange={setAddonLabelFormat}
+                                autoComplete="off"
+                              />
+                            </InlineStack>
+                          </Box>
+                          
+                          <Divider />
+                          
+                          <Box paddingBlockStart="100" paddingBlockEnd="200">
+                            <Text variant="headingXs" as="h6" tone="subdued" fontWeight="semibold" paddingBlockEnd="200">Behavior Settings</Text>
+                            <InlineStack align="space-between" blockAlign="center">
+                              <Text as="p" variant="bodyMd">Show add-on for inputs</Text>
+                              <CustomToggle checked={toggleStates.showAddonForInputs} onChange={() => handleToggle("showAddonForInputs")} />
+                            </InlineStack>
+                          </Box>
 
-                            <Box paddingBlockStart="200" paddingBlockEnd="200">
-                              <InlineStack align="space-between" blockAlign="center">
-                                <Text as="p">Show add-on for inputs ⓘ</Text>
-                                <CustomToggle checked={toggleStates.showAddonForInputs} onChange={() => handleToggle("showAddonForInputs")} />
-                              </InlineStack>
-                            </Box>
+                          <Box paddingBlockStart="100" paddingBlockEnd="200">
+                            <InlineStack align="space-between" blockAlign="center">
+                              <Text as="p" variant="bodyMd">Show add-on for options</Text>
+                              <CustomToggle checked={toggleStates.showAddonForOptions} onChange={() => handleToggle("showAddonForOptions")} />
+                            </InlineStack>
+                          </Box>
 
-                            <Box paddingBlockStart="200" paddingBlockEnd="200">
-                              <InlineStack align="space-between" blockAlign="center">
-                                <Text as="p">Show add-on for options ⓘ</Text>
-                                <CustomToggle checked={toggleStates.showAddonForOptions} onChange={() => handleToggle("showAddonForOptions")} />
-                              </InlineStack>
-                            </Box>
+                          <Box paddingBlockStart="100" paddingBlockEnd="200">
+                            <InlineStack align="space-between" blockAlign="center">
+                              <Text as="p" variant="bodyMd">Show add-on message</Text>
+                              <CustomToggle checked={toggleStates.showAddonMessage} onChange={() => handleToggle("showAddonMessage")} />
+                            </InlineStack>
+                          </Box>
 
-                            <Box paddingBlockStart="200" paddingBlockEnd="200">
-                              <InlineStack align="space-between" blockAlign="center">
-                                <Text as="p">Show add-on message</Text>
-                                <CustomToggle checked={toggleStates.showAddonMessage} onChange={() => handleToggle("showAddonMessage")} />
-                              </InlineStack>
-                            </Box>
+                          <Box paddingBlockStart="100" paddingBlockEnd="200">
+                            <InlineStack align="space-between" blockAlign="center">
+                              <Text as="p" variant="bodyMd">Add add-on price to the product price</Text>
+                              <CustomToggle checked={toggleStates.addAddonPriceToProductPrice} onChange={() => handleToggle("addAddonPriceToProductPrice")} />
+                            </InlineStack>
+                          </Box>
 
-                            <Box paddingBlockStart="200" paddingBlockEnd="200">
-                              <InlineStack align="space-between" blockAlign="center">
-                                <Text as="p">Add add-on price to the product price</Text>
-                                <CustomToggle checked={toggleStates.addAddonPriceToProductPrice} onChange={() => handleToggle("addAddonPriceToProductPrice")} />
-                              </InlineStack>
-                            </Box>
-
-                            <Box paddingBlockStart="200" paddingBlockEnd="200">
-                              <InlineStack align="space-between" blockAlign="center">
-                                <Text as="p">Merge Main product & Add-on products</Text>
-                                <CustomToggle checked={toggleStates.mergeMainProductAndAddonProducts} onChange={() => handleToggle("mergeMainProductAndAddonProducts")} />
-                              </InlineStack>
-                            </Box>
-                          </BlockStack>
-                        </Box>
+                          <Box paddingBlockStart="100" paddingBlockEnd="200">
+                            <InlineStack align="space-between" blockAlign="center">
+                              <Text as="p" variant="bodyMd">Merge Main product & Add-on products</Text>
+                              <CustomToggle checked={toggleStates.mergeMainProductAndAddonProducts} onChange={() => handleToggle("mergeMainProductAndAddonProducts")} />
+                            </InlineStack>
+                          </Box>
+                        </BlockStack>
                       </Box>
                     </BlockStack>
                   )}
@@ -661,10 +864,15 @@ export default function Settings() {
           </Box>
           <Box>
             <div style={{ position: "sticky", top: "1rem" }}>
-              <Card padding="400">
-                <Text variant="headingSm" as="h3">Preview</Text>
-                <Box paddingBlockStart="400">
-                  <div className="widget-preview-container" style={{ textAlign: alignment, background: colors.appBackground, color: colors.labelText, padding: '16px', borderRadius: '8px' }}>
+              <Card padding="0">
+                <Box padding="300" background="bg-surface-secondary" borderBlockEndWidth="025" borderColor="border">
+                  <InlineStack align="start" blockAlign="center" gap="200">
+                    <Icon source={TextAlignLeftIcon} tone="base" />
+                    <Text variant="headingSm" as="h3" fontWeight="semibold">Live Preview</Text>
+                  </InlineStack>
+                </Box>
+                <Box padding="400">
+                  <div className="widget-preview-container" style={{ textAlign: alignment, background: colors.appBackground, color: colors.labelText, padding: '24px', borderRadius: '12px', border: '1px solid var(--p-color-border-subdued)', boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)' }}>
                       <style>{`
     .widget-preview-container {
       --p-color-bg-surface: ${colors.appBackground};
@@ -681,11 +889,15 @@ export default function Settings() {
       background-color: ${colors.inputBackground} !important; 
       color: ${colors.inputText} !important; 
       border-color: ${colors.inputBorder} !important; 
+      border-width: ${borders.inputSize}px !important;
+      border-radius: ${borders.inputRadius}px !important;
     }
     .widget-preview-container .Polaris-Select__Input { 
       background-color: ${colors.dropdownBackground} !important; 
       color: ${colors.dropdownText} !important; 
       border-color: ${colors.dropdownBorder} !important; 
+      border-width: ${borders.dropdownSize}px !important;
+      border-radius: ${borders.dropdownRadius}px !important;
     }
     
     .widget-preview-container .Polaris-ChoiceList__Choice { 
@@ -709,15 +921,29 @@ export default function Settings() {
     .widget-preview-container .Polaris-Button { 
       background: ${colors.buttonBackground} !important; 
       color: ${colors.buttonText} !important; 
-      border-color: ${colors.inputBorder} !important; 
+      border-color: ${colors.swatchBorder} !important; 
+      border-width: ${borders.swatchSize}px !important;
+      border-radius: ${borders.swatchRadius}px !important;
     }
     .widget-preview-container .Polaris-Button:hover { 
       background: ${colors.buttonBackgroundHover} !important; 
       color: ${colors.buttonTextHover} !important; 
+      border-color: ${colors.swatchBorderHover} !important; 
     }
     .widget-preview-container .Polaris-Button:active { 
       background: ${colors.buttonBackgroundActive} !important; 
       color: ${colors.buttonTextActive} !important; 
+      border-color: ${colors.swatchBorderActive} !important; 
+    }
+
+    /* Typography overrides */
+    .widget-preview-container .Polaris-Text--root[font-weight="bold"] { 
+      font-family: ${typography.labelCustom ? typography.labelFont + ", sans-serif" : "inherit"} !important;
+      font-size: ${typography.labelSize}px !important;
+    }
+    .widget-preview-container .Polaris-Text--toneSubdued { 
+      font-family: ${typography.helpCustom ? typography.helpFont + ", sans-serif" : "inherit"} !important;
+      font-size: ${typography.helpSize}px !important;
     }
   `}</style>
                     <BlockStack gap="300">
@@ -791,32 +1017,32 @@ export default function Settings() {
     );
   } else if (topTab === 1) {
     mainContent = (
-      <Box padding="400">
+      <Box padding="0">
         <BlockStack gap="400">
           <Card padding="0">
-            <Box padding="400" borderBlockEndWidth="1" borderColor="border">
+            <Box padding="400" borderBlockEndWidth="025" borderColor="border" background="bg-surface-secondary">
               <InlineStack align="space-between" blockAlign="center" gap="300">
-                <Text variant="headingLg" as="h1">
+                <Text variant="headingMd" as="h1" fontWeight="semibold">
                   Translations
                 </Text>
                 <InlineStack gap="200">
                   <Button>Add language</Button>
-                  <Button>Translating Default ⭐</Button>
+                  <Button icon={TextAlignLeftIcon}>Translating Default</Button>
                 </InlineStack>
               </InlineStack>
             </Box>
             <Box padding="400">
               <BlockStack gap="400">
                 <Card padding="0">
-                  <Box padding="300" borderBlockEndWidth="1" borderColor="border">
-                    <Text variant="headingMd" as="h3">Widget</Text>
+                  <Box padding="300" borderBlockEndWidth="025" borderColor="border" background="bg-surface-secondary">
+                    <Text variant="headingSm" as="h3" fontWeight="semibold">Widget translation</Text>
                   </Box>
                   <Box>
                     <InlineGrid columns={2} gap="0">
-                      <Box padding="300" borderBlockEndWidth="1" borderColor="border" background="bg-surface-subdued">
+                      <Box padding="300" borderBlockEndWidth="025" borderColor="border" background="bg-surface-subdued">
                         <Text as="p" fontWeight="bold">English (Default)</Text>
                       </Box>
-                      <Box padding="300" borderBlockEndWidth="1" borderColor="border" borderInlineStartWidth="1">
+                      <Box padding="300" borderBlockEndWidth="025" borderColor="border" borderInlineStartWidth="025" background="bg-surface-subdued">
                         <Text as="p" fontWeight="bold">Default</Text>
                       </Box>
                       
@@ -833,15 +1059,15 @@ export default function Settings() {
                 </Card>
 
                 <Card padding="0">
-                  <Box padding="300" borderBlockEndWidth="1" borderColor="border">
-                    <Text variant="headingMd" as="h3">Cart widget</Text>
+                  <Box padding="300" borderBlockEndWidth="025" borderColor="border" background="bg-surface-secondary">
+                    <Text variant="headingSm" as="h3" fontWeight="semibold">Cart widget</Text>
                   </Box>
                   <Box>
                     <InlineGrid columns={2} gap="0">
-                      <Box padding="300" borderBlockEndWidth="1" borderColor="border" background="bg-surface-subdued">
+                      <Box padding="300" borderBlockEndWidth="025" borderColor="border" background="bg-surface-subdued">
                         <Text as="p" fontWeight="bold">English (Default)</Text>
                       </Box>
-                      <Box padding="300" borderBlockEndWidth="1" borderColor="border" borderInlineStartWidth="1">
+                      <Box padding="300" borderBlockEndWidth="025" borderColor="border" borderInlineStartWidth="025" background="bg-surface-subdued">
                         <Text as="p" fontWeight="bold">Default</Text>
                       </Box>
                       
@@ -859,10 +1085,19 @@ export default function Settings() {
     );
   } else {
     mainContent = (
-      <Card>
-        <Text variant="headingMd" as="h3">
-          Theme Setup
-        </Text>
+      <Card padding="0">
+        <Box padding="800">
+          <BlockStack inlineAlign="center" gap="400">
+            <Box maxWidth="200px">
+              <img src="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png" alt="Theme setup" style={{ width: '100%', height: 'auto', opacity: 0.8 }} />
+            </Box>
+            <BlockStack gap="200" inlineAlign="center">
+              <Text variant="headingLg" as="h2">Theme Setup Integration</Text>
+              <Text as="p" tone="subdued" alignment="center">Configure how the app integrates with your current theme architecture.</Text>
+            </BlockStack>
+            <Button variant="primary" size="large">Configure theme</Button>
+          </BlockStack>
+        </Box>
       </Card>
     );
   }
@@ -889,22 +1124,16 @@ export default function Settings() {
           { content: "Import settings", onAction: () => fileInputRef.current?.click() },
         ] : undefined}
       >
-        <Box paddingBlockEnd="400">
-          <InlineStack align="center" gap="200">
-            <ButtonGroup variant="segmented">
-              {topTabs.map((tab, index) => (
-                <Button
-                  key={index}
-                  variant={topTab === index ? "primary" : "tertiary"}
-                  onClick={() => handleTopTabChange(index)}
-                >
-                  {tab.content}
-                </Button>
-              ))}
-            </ButtonGroup>
-          </InlineStack>
-        </Box>
-        {mainContent}
+        <Tabs
+          tabs={topTabs}
+          selected={topTab}
+          onSelect={handleTopTabChange}
+          fitted={false}
+        >
+          <Box paddingBlockStart="400">
+            {mainContent}
+          </Box>
+        </Tabs>
       </Page>
     </AppProvider>
   );

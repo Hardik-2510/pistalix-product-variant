@@ -28,7 +28,6 @@ export default function App() {
           <Link to="/app/option-sets">Option Sets</Link>
           <Link to="/app/templates">Templates</Link>
           <Link to="/app/settings">Settings</Link>
-          <Link to="/app/automations">Automations</Link>
           <Link to="/app/contact-us">Contact Us</Link>
         </ui-nav-menu>
         <Outlet />

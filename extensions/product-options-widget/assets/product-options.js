@@ -25,10 +25,16 @@ function initPistalixWidget() {
       if (typeof capConfig.settings === 'string') {
         capConfig.settings = JSON.parse(capConfig.settings);
       }
-    } catch(e) {}
+    } catch(e) { console.warn("Pistalix: JSON parse failed", e); }
   }
 
   var toggleStates = capConfig.settings ? capConfig.settings.toggleStates : {};
+  
+  // Initialize cart page features globally (handles ajax carts/drawers as well)
+  if (toggleStates) {
+    initCartPageFeatures(toggleStates);
+  }
+
   var pageType = container.getAttribute('data-page-type');
   
   if (toggleStates) {
@@ -456,7 +462,7 @@ function renderTemplate(template, container) {
   wrapper.addEventListener('input', updateTotalPrice);
   wrapper.addEventListener('change', updateTotalPrice);
 
-  applyDynamicStyles(wrapper, container);
+  applyDynamicStyles(wrapper);
 
   container.appendChild(wrapper);
   // Hide the original container div — the wrapper will be moved
@@ -469,10 +475,10 @@ function renderTemplate(template, container) {
   setTimeout(updateTotalPrice, 100);
 }
 
-function applyDynamicStyles(wrapper, container) {
+function applyDynamicStyles(wrapper) {
   var appSettings = capConfig.settings || {};
   if (typeof appSettings === 'string') {
-    try { appSettings = JSON.parse(appSettings); } catch(e) {}
+    try { appSettings = JSON.parse(appSettings); } catch(e) { console.warn("Pistalix: settings parse failed", e); }
   }
   
   var colors = appSettings.colors || {};
@@ -621,7 +627,7 @@ function injectIntoCartForm(wrapper, container) {
   var appSettings = {};
   var settingsAttr = container.getAttribute('data-app-settings');
   if (settingsAttr) {
-    try { appSettings = JSON.parse(settingsAttr); } catch(e) {}
+    try { appSettings = JSON.parse(settingsAttr); } catch(e) { console.warn("Pistalix: container settings parse failed", e); }
   }
   
   var position = appSettings.position || "Above add to cart button";
@@ -1279,6 +1285,10 @@ function renderSwitch(element) {
   var group = createGroup(element);
   var config = parseConfig(element.config);
   var defaultValue = config.defaultValue === true || String(config.defaultValue) === 'true';
+  
+  var colors = (capConfig.settings && capConfig.settings.colors) ? capConfig.settings.colors : {};
+  var activeColor = colors.switchActiveBackground || '#ea1255';
+  var inactiveColor = colors.switchBackground || '#dddddd';
 
   var hiddenInput = document.createElement('input');
   hiddenInput.type = 'hidden';
@@ -1294,13 +1304,14 @@ function renderSwitch(element) {
   var toggle = document.createElement('div');
   toggle.className = 'cap-switch-toggle';
   toggle.style.cssText = [
-    'width:40px',
-    'height:22px',
-    'border-radius:11px',
-    'background-color:' + (defaultValue ? '#2563eb' : '#ccc'),
+    'width:44px',
+    'height:24px',
+    'border-radius:12px',
+    'background-color:' + (defaultValue ? activeColor : inactiveColor),
     'position:relative',
     'cursor:pointer',
-    'transition:background-color 0.2s'
+    'transition:background-color 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+    'flex-shrink:0'
   ].join(';');
 
   var handle = document.createElement('div');
@@ -1308,18 +1319,27 @@ function renderSwitch(element) {
     'width:18px',
     'height:18px',
     'border-radius:50%',
-    'background-color:white',
+    'background:#ffffff',
     'position:absolute',
-    'top:2px',
-    'left:' + (defaultValue ? '20px' : '2px'),
-    'transition:left 0.2s',
-    'box-shadow:0 1px 2px rgba(0,0,0,0.2)'
+    'top:3px',
+    'left:' + (defaultValue ? '23px' : '3px'),
+    'transition:left 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s ease',
+    'box-shadow:0 1px 4px rgba(0,0,0,0.2), 0 0 0 1px rgba(0,0,0,0.04)',
+    'display:block',
+    'z-index:2',
+    'box-sizing:border-box',
+    'margin:0',
+    'padding:0',
+    'border:none'
   ].join(';');
 
   toggle.appendChild(handle);
   wrap.appendChild(toggle);
 
   var labelText = document.createElement('span');
+  labelText.className = 'cap-label-text cap-switch-label';
+  labelText.style.fontSize = '14px';
+  labelText.style.fontWeight = '500';
   labelText.textContent = defaultValue ? (config.labelOn || 'ON') : (config.labelOff || 'OFF');
   wrap.appendChild(labelText);
 
@@ -1327,13 +1347,13 @@ function renderSwitch(element) {
     var isTrue = hiddenInput.value === 'true';
     if (isTrue) {
       hiddenInput.value = 'false';
-      toggle.style.backgroundColor = '#ccc';
-      handle.style.left = '2px';
+      toggle.style.backgroundColor = inactiveColor;
+      handle.style.left = '3px';
       labelText.textContent = config.labelOff || 'OFF';
     } else {
       hiddenInput.value = 'true';
-      toggle.style.backgroundColor = '#2563eb';
-      handle.style.left = '20px';
+      toggle.style.backgroundColor = activeColor;
+      handle.style.left = '23px';
       labelText.textContent = config.labelOn || 'ON';
     }
     hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
@@ -2152,4 +2172,153 @@ function enableGroupInputs(group, enable) {
   });
 }
 
+/* ─── Cart Page Features ─────────────────────────────────────── */
+function initCartPageFeatures(toggleStates) {
+  var isApplying = false;
+  var debounceTimer;
+
+  function applyCartModifications() {
+    if (isApplying) return;
+    isApplying = true;
+
+    var cartUrl = (window.Shopify && window.Shopify.routes && window.Shopify.routes.root) ? window.Shopify.routes.root + 'cart.js' : '/cart.js';
+
+    fetch(cartUrl)
+      .then(function(res) { return res.json(); })
+      .then(function(cart) {
+        if (!cart || !cart.items) {
+           isApplying = false;
+           return;
+        }
+
+        // Broad selector for cart item rows in most Shopify themes
+        var cartRows = document.querySelectorAll('.cart-item, .cart__row, .cart-table-row, tr.cart-item, .mini-cart-item, .drawer__cart-item, li.cart-drawer__item, .cart-drawer__item');
+        
+        var validRows = [];
+        cartRows.forEach(function(row) {
+           // Ensure it's an actual item row by checking for a remove link or quantity input
+           if (row.querySelector('cart-remove-button, .cart__remove, .cart-item__remove, [href*="/cart/change"], quantity-input, input[name^="updates"]')) {
+             if (validRows.indexOf(row) === -1) {
+               validRows.push(row);
+             }
+           }
+        });
+
+        validRows.forEach(function(row) {
+          var item = null;
+          
+          // 1. Try to find by data-key
+          var key = row.getAttribute('data-key') || row.getAttribute('data-cart-item-key');
+          if (key) {
+            for (var i = 0; i < cart.items.length; i++) {
+              if (cart.items[i].key === key) {
+                item = cart.items[i];
+                break;
+              }
+            }
+          }
+          
+          // 2. Try to find by index in ID (e.g., CartDrawer-Item-1)
+          if (!item && row.id) {
+            var match = row.id.match(/-(\d+)$/);
+            if (match && match[1]) {
+              var idx = parseInt(match[1], 10) - 1;
+              if (cart.items[idx]) item = cart.items[idx];
+            }
+          }
+          
+          // 3. Fallback: assume rows are ordered the same as cart.items (handles multiple cart wrappers on the same page)
+          if (!item && cart.items.length > 0) {
+            var idx = validRows.indexOf(row) % cart.items.length;
+            item = cart.items[idx];
+          }
+
+          if (!item) return;
+
+          var props = item.properties || {};
+          var propsStr = JSON.stringify(props);
+          var isAddon = propsStr.indexOf('_is_addon') > -1 || propsStr.indexOf('_parent_id') > -1 || propsStr.indexOf('"Addon"') > -1 || propsStr.indexOf('_addon') > -1;
+          var hasCustomOptions = propsStr.indexOf('_CustomOptions') > -1 || propsStr.indexOf('"CustomOptions"') > -1 || propsStr.indexOf('_price_adjustments') > -1 || propsStr.indexOf('_base_price') > -1 || propsStr.indexOf('_final_price') > -1;
+
+          // In case the theme did output the properties, we hide them explicitly
+          var domProps = row.querySelectorAll('.product-details__item, .cart-item__details dl div, .cart-item__property, .item-property, dd, .cart-item__details-property');
+          domProps.forEach(function(prop) {
+            var text = prop.textContent || '';
+            if (text.indexOf('_CustomOptions') > -1 || text.indexOf('_price_adjustments') > -1 || text.indexOf('_is_addon') > -1) {
+              prop.style.display = 'none';
+            }
+          });
+
+          // 1. Hide quantity box and remove button for add-on products
+          if (toggleStates.hideQuantity && isAddon) {
+            var qty = row.querySelector('.cart-item__quantity-wrapper, quantity-input, .cart__qty, .cart-item__quantity, input[name^="updates"]');
+            if (qty) qty.setAttribute('style', 'display: none !important; visibility: hidden !important;');
+            
+            var removeBtn = row.querySelector('cart-remove-button, .cart__remove, .cart-item__remove');
+            if (removeBtn) removeBtn.setAttribute('style', 'display: none !important; visibility: hidden !important;');
+          }
+
+          // 2. Show Edit Options button in cart
+          if (toggleStates.showEditOptions && hasCustomOptions) {
+            if (!row.querySelector('.cap-edit-options-btn')) {
+              var editBtn = document.createElement('a');
+              editBtn.href = 'javascript:void(0)';
+              editBtn.className = 'cap-edit-options-btn link';
+              editBtn.style.cssText = 'display:inline-flex; align-items:center; margin-top:8px; font-size:13px; text-decoration:underline; cursor:pointer; color:inherit; opacity:0.8; transition:opacity 0.2s;';
+              editBtn.innerHTML = '<svg style="width:14px;height:14px;margin-right:4px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>Edit Options';
+              
+              editBtn.addEventListener('mouseenter', function() { editBtn.style.opacity = '1'; });
+              editBtn.addEventListener('mouseleave', function() { editBtn.style.opacity = '0.8'; });
+              
+              editBtn.addEventListener('click', function(e) {
+                 e.preventDefault();
+                 alert('Edit Options functionality will open the product popup here.');
+              });
+
+              var detailsWrap = row.querySelector('.cart-item__details, .cart__item-details, .product-details, dl') || row.querySelector('td:nth-child(2)');
+              if (detailsWrap) {
+                var dl = detailsWrap.querySelector('dl');
+                if (dl) {
+                  dl.insertAdjacentElement('afterend', editBtn);
+                } else {
+                  detailsWrap.appendChild(editBtn);
+                }
+              }
+            }
+          }
+        });
+        isApplying = false;
+      })
+      .catch(function(e) {
+        console.warn('Pistalix: Cart fetch failed', e);
+        isApplying = false;
+      });
+  }
+
+  function applyCartModificationsDebounced() {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(applyCartModifications, 400);
+  }
+
+  // Run initially
+  applyCartModificationsDebounced();
+
+  // Re-run on DOM mutations (for ajax carts/drawers)
+  var observer = new MutationObserver(function(mutations) {
+    var shouldApply = false;
+    for (var i = 0; i < mutations.length; i++) {
+      for (var j = 0; j < mutations[i].addedNodes.length; j++) {
+        var node = mutations[i].addedNodes[j];
+        if (node.nodeType === 1 && !node.classList.contains('cap-edit-options-btn')) {
+          shouldApply = true;
+        }
+      }
+    }
+    if (shouldApply) applyCartModificationsDebounced();
+  });
+  
+  if (document.body) {
+    observer.observe(document.body, { childList: true, subtree: true });
+  }
+}
 

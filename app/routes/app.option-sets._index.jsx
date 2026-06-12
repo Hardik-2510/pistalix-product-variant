@@ -8,14 +8,14 @@ import {
   Popover,
   ActionList,
   Button,
-  InlineStack,
   Text,
   Box,
   Modal,
   BlockStack,
   IndexTable,
   useIndexResourceState,
-  Badge
+  Badge,
+  Filters,
 } from "@shopify/polaris";
 import english from "@shopify/polaris/locales/en.json";
 import { authenticate } from "../shopify.server";
@@ -52,14 +52,27 @@ export default function Index() {
   const [popoverActive, setPopoverActive] = useState(false);
   const [learnMoreOpen, setLearnMoreOpen] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [queryValue, setQueryValue] = useState("");
+
+  const handleQueryValueChange = useCallback(
+    (value) => setQueryValue(value),
+    []
+  );
+  const handleQueryValueRemove = useCallback(() => setQueryValue(""), []);
+  const handleClearAll = useCallback(() => {
+    handleQueryValueRemove();
+  }, [handleQueryValueRemove]);
+
+  const filteredOptionSets = optionSets.filter(os => 
+    os.name.toLowerCase().includes(queryValue.toLowerCase())
+  );
 
   const {
     selectedResources,
     allResourcesSelected,
     handleSelectionChange,
     clearSelection,
-  } = useIndexResourceState(optionSets);
-  
+  } = useIndexResourceState(filteredOptionSets);
   const togglePopoverActive = useCallback(
     () => setPopoverActive((active) => !active),
     []
@@ -71,7 +84,7 @@ export default function Index() {
     </Button>
   );
 
-  const rowMarkup = optionSets.map(
+  const rowMarkup = filteredOptionSets.map(
     ({ id, name, status, updatedAt }, index) => (
       <IndexTable.Row
         id={id}
@@ -90,52 +103,61 @@ export default function Index() {
             {status === "active" ? "Active" : "Draft"}
           </Badge>
         </IndexTable.Cell>
-        <IndexTable.Cell>{new Date(updatedAt).toLocaleDateString()}</IndexTable.Cell>
+        <IndexTable.Cell>
+          {new Date(updatedAt).toLocaleDateString(undefined, {
+            year: "numeric",
+            month: "short",
+            day: "numeric",
+          })}
+        </IndexTable.Cell>
       </IndexTable.Row>
     )
   );
 
   return (
     <AppProvider i18n={english}>
-      <Page>
-        <Box paddingBlockEnd="400">
-          <InlineStack align="space-between" blockAlign="center">
-            <Text variant="headingLg" as="h1">
-              Option Sets
-            </Text>
-            
-            <InlineStack gap="300">
-              <Button disabled>Import option sets ⭐</Button>
-              <Popover
-                active={popoverActive}
-                activator={dropdownActivator}
-                autofocusTarget="first-node"
-                onClose={togglePopoverActive}
-              >
-                <ActionList
-                  actionRole="menuitem"
-                  items={[
-                    { 
-                      content: "Create from scratch",
-                      onAction: () => navigate("/app/option-sets/new")
-                    },
-                    { 
-                      content: "Use a template",
-                      onAction: () => navigate("/app/templates")
-                    },
-                  ]}
-                />
-              </Popover>
-            </InlineStack>
-          </InlineStack>
-        </Box>
+      <Page 
+        title="Option Sets"
+        primaryAction={dropdownActivator}
+        secondaryActions={[
+          {
+            content: "Import option sets",
+            disabled: true,
+          }
+        ]}
+      >
+        <div style={{ display: 'none' }}>
+          {/* Keep popover for Create button */}
+          <Popover
+            active={popoverActive}
+            activator={<div id="create-btn-activator" />}
+            autofocusTarget="first-node"
+            onClose={togglePopoverActive}
+          >
+            <ActionList
+              actionRole="menuitem"
+              items={[
+                { 
+                  content: "Create from scratch",
+                  onAction: () => navigate("/app/option-sets/new")
+                },
+                { 
+                  content: "Use a template",
+                  onAction: () => navigate("/app/templates")
+                },
+              ]}
+            />
+          </Popover>
+        </div>
+
+        <Box paddingBlockEnd="400" />
 
         <Card padding="0">
-          {optionSets.length === 0 ? (
+          {filteredOptionSets.length === 0 && optionSets.length === 0 ? (
             <EmptyState
               heading="No option sets found"
               action={{
-                content: "Create from scratch",
+                content: "Create option set",
                 variant: "primary",
                 onAction: () => navigate("/app/option-sets/new")
               }}
@@ -145,12 +167,23 @@ export default function Index() {
               }}
               image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
             >
-              <p>Try changing the filters or search term</p>
+              <p>Create an option set to start adding custom fields and options to your products.</p>
             </EmptyState>
           ) : (
-            <IndexTable
-              resourceName={{ singular: 'option set', plural: 'option sets' }}
-              itemCount={optionSets.length}
+            <>
+              <Box padding="200">
+                <Filters
+                  queryValue={queryValue}
+                  filters={[]}
+                  appliedFilters={[]}
+                  onQueryChange={handleQueryValueChange}
+                  onQueryClear={handleQueryValueRemove}
+                  onClearAll={handleClearAll}
+                />
+              </Box>
+              <IndexTable
+                resourceName={{ singular: 'option set', plural: 'option sets' }}
+                itemCount={filteredOptionSets.length}
               headings={[
                 { title: 'Name' },
                 { title: 'Status' },
@@ -169,6 +202,7 @@ export default function Index() {
             >
               {rowMarkup}
             </IndexTable>
+            </>
           )}
         </Card>
 

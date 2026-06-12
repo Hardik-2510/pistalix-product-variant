@@ -1,8 +1,7 @@
 import {
   Page,
   Card,
-  Text,
-  Box,
+  EmptyState,
 } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
 
@@ -13,16 +12,23 @@ export const loader = async ({ request }) => {
 
 export default function Integrations() {
   return (
-    <Page>
-      <Card>
-        <Text variant="headingLg" as="h1">
-          Integrations
-        </Text>
-        <Box paddingBlockStart="400">
-          <Text as="p" tone="subdued">
-            Third-party integrations will go here.
-          </Text>
-        </Box>
+    <Page title="Integrations">
+      <Card padding="0">
+        <EmptyState
+          heading="No integrations configured"
+          action={{
+            content: "Browse integrations",
+            variant: "primary",
+            onAction: () => {},
+          }}
+          secondaryAction={{
+            content: "Learn more",
+            onAction: () => window.open('https://help.shopify.com', '_blank')
+          }}
+          image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
+        >
+          <p>Connect your app with third-party services to enhance your store&apos;s functionality.</p>
+        </EmptyState>
       </Card>
     </Page>
   );

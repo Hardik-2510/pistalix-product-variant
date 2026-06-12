@@ -1,20 +1,19 @@
 import { useState, useCallback, useRef } from "react";
 import crypto from "crypto";
 import {
-  Tabs,
-  EmptyState,
-  InlineGrid,
-  Box,
-  Text,
   Button,
   InlineStack,
   BlockStack,
-  Badge,
   Card,
-  AppProvider,
   Modal,
+  Page,
+  Text,
+  Box,
+  Tabs,
+  InlineGrid,
+  EmptyState,
+  Badge,
 } from "@shopify/polaris";
-import english from "@shopify/polaris/locales/en.json";
 import "@shopify/polaris/build/esm/styles.css";
 import { useNavigate, useLoaderData, useFetcher } from "react-router";
 import prisma from "../db.server";
@@ -286,6 +285,7 @@ export default function Templates() {
 
   // 3. Reusable Template Card Component
   const TemplateItem = ({ id, title, imageUrl, onClick, onExport }) => (
+    <div className="template-card-wrapper">
     <Card padding="0">
       <BlockStack>
         {/* Image Container */}
@@ -293,20 +293,22 @@ export default function Templates() {
           minHeight="200px" 
           width="100%" 
           overflow="hidden" 
-          style={{ borderBottom: '1px solid #e1e3e5' }}
+          background="bg-surface-secondary"
+          style={{ position: 'relative' }}
         >
           <img 
             src={imageUrl || "https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"} 
             alt={title} 
             style={{ width: "100%", height: "200px", objectFit: "cover" }} 
           />
+          <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '40%', background: 'linear-gradient(to top, rgba(0,0,0,0.05), transparent)' }} />
         </Box>
         
         {/* Content & Actions */}
         <Box padding="300">
           <BlockStack gap="300">
-            <InlineStack align="space-between">
-              <Text variant="headingMd" as="h3">{title}</Text>
+            <InlineStack align="space-between" blockAlign="center">
+              <Text variant="headingMd" as="h3" fontWeight="bold">{title}</Text>
               <InlineStack gap="100">
                 {onExport && (
                   <Button variant="tertiary" onClick={() => onExport(id)}>Export</Button>
@@ -316,19 +318,22 @@ export default function Templates() {
                 )}
               </InlineStack>
             </InlineStack>
-            <InlineStack gap="200">
-              <Button variant="primary" onClick={onClick ? onClick : () => {
-                if (id) navigate(`/app/option-sets/new?templateId=${id}`);
-                else if (typeof shopify !== 'undefined' && shopify.toast) shopify.toast.show("This template is not available yet");
-              }}>
-                {onClick ? "Edit template" : "+ Use template"}
-              </Button>
-              <Button variant="tertiary">View demo</Button>
+            <InlineStack gap="200" align="space-between">
+              <div style={{ flex: 1 }}>
+                <Button fullWidth variant="primary" onClick={onClick ? onClick : () => {
+                  if (id) navigate(`/app/option-sets/new?templateId=${id}`);
+                  else if (typeof shopify !== 'undefined' && shopify.toast) shopify.toast.show("This template is not available yet");
+                }}>
+                  {onClick ? "Edit template" : "+ Use template"}
+                </Button>
+              </div>
+              <Button>View demo</Button>
             </InlineStack>
           </BlockStack>
         </Box>
       </BlockStack>
     </Card>
+    </div>
   );
 
   // 4. Content Logic
@@ -359,12 +364,12 @@ export default function Templates() {
           <Box padding={optionSets.length === 0 ? "800" : "400"}>
             {optionSets.length === 0 ? (
               <EmptyState
-                heading="No templates found"
+                heading="No custom templates found"
                 action={{ content: "Create template", variant: "primary", onAction: () => navigate("/app/templates/new") }}
-                secondaryAction={{ content: "Learn more" }}
+                secondaryAction={{ content: "Learn more", onAction: () => window.open('https://help.shopify.com', '_blank') }}
                 image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
               >
-                <p>Try changing the filters or search term</p>
+                <p>Create a custom template to save your frequently used product option configurations.</p>
               </EmptyState>
             ) : (
               <InlineGrid columns={{ xs: 1, sm: 2, md: 3, lg: 4 }} gap="400">
@@ -387,26 +392,42 @@ export default function Templates() {
   };
 
   return (
-    <s-page heading="Option Templates">
-      <s-section>
-        <InlineStack align="space-between" variant="headingLg" as="h2" blockAlign="center">
-          <s-text size="large">Option Templates</s-text>
-          <InlineStack gap="300">
-            <Button onClick={() => fileInputRef.current?.click()}>Import template</Button>
-            <Button onClick={exportAllTemplates}>Export templates</Button>
-            <Button variant="primary" onClick={() => navigate("/app/templates/new")}>Create template</Button>
-          </InlineStack>
-        </InlineStack>
-        <input 
-          type="file" 
-          accept=".json" 
-          ref={fileInputRef} 
-          style={{ display: "none" }} 
-          onChange={handleImport} 
-        />
-      </s-section>
+    <Page
+      title="Option Templates"
+      primaryAction={{
+        content: "Create template",
+        onAction: () => navigate("/app/templates/new"),
+      }}
+      secondaryActions={[
+        {
+          content: "Import template",
+          onAction: () => fileInputRef.current?.click(),
+        },
+        {
+          content: "Export templates",
+          onAction: exportAllTemplates,
+        },
+      ]}
+    >
+      <style>{`
+        .template-card-wrapper {
+          transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+          border-radius: var(--p-border-radius-200);
+        }
+        .template-card-wrapper:hover {
+          transform: translateY(-2px);
+          box-shadow: var(--p-shadow-300);
+        }
+      `}</style>
+      <input 
+        type="file" 
+        accept=".json" 
+        ref={fileInputRef} 
+        style={{ display: "none" }} 
+        onChange={handleImport} 
+      />
 
-      <s-section>
+      <BlockStack gap="400">
         <Card padding="0">
           <Tabs tabs={tabs} selected={selected} onSelect={handleTabChange}>
             {renderTabContent()}
@@ -433,7 +454,7 @@ export default function Templates() {
             <Text as="p">This can&apos;t be undone.</Text>
           </Modal.Section>
         </Modal>
-      </s-section>
-    </s-page>
+      </BlockStack>
+    </Page>
   );
 }
