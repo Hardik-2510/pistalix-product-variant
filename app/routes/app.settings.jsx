@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useLoaderData, useSubmit, useNavigation } from "react-router";
 import { authenticate } from "../shopify.server";
 import {
@@ -107,25 +107,32 @@ function TranslationRow({ english }) {
 export async function loader({ request }) {
   const { admin } = await authenticate.admin(request);
 
-  const response = await admin.graphql(`
-    #graphql
-    query {
-      shop {
-        id
-        metafield(namespace: "pistalix", key: "settings") {
-          value
+  try {
+    const response = await admin.graphql(`
+      #graphql
+      query {
+        shop {
+          id
+          metafield(namespace: "pistalix", key: "settings") {
+            value
+          }
         }
       }
+    `);
+    const data = await response.json();
+    const settingsStr = data?.data?.shop?.metafield?.value || "{}";
+    const shopId = data?.data?.shop?.id;
+    let settings = {};
+    try {
+      settings = JSON.parse(settingsStr);
+    } catch(e) {
+      console.warn("Failed to parse settings JSON:", e);
     }
-  `);
-  const data = await response.json();
-  const settingsStr = data?.data?.shop?.metafield?.value || "{}";
-  const shopId = data?.data?.shop?.id;
-  let settings = {};
-  try {
-    settings = JSON.parse(settingsStr);
-  } catch(e) {}
-  return { settings, shopId };
+    return { settings, shopId };
+  } catch (error) {
+    console.error("GraphQL Error in loader:", error);
+    return { settings: {}, shopId: null };
+  }
 }
 
 export async function action({ request }) {
@@ -136,7 +143,7 @@ export async function action({ request }) {
   if (!payload || !ownerId) return { success: false };
   
   try {
-    const response = await admin.graphql(`
+    await admin.graphql(`
       #graphql
       mutation metafieldsSet($metafields: [MetafieldsSetInput!]!) {
       metafieldsSet(metafields: $metafields) {
@@ -750,7 +757,7 @@ export default function Settings() {
                           Select
                           {toggleStates.displayValue && <Text as="span" tone="subdued"> (Option 1)</Text>}
                         </Text>
-                        <Select options={["Please choose..."]} />
+                        <Select options={["Please choose..."]} value="Please choose..." onChange={() => {}} />
                       </Box>
                       <Box>
                         <Text as="p" fontWeight="bold">Switch</Text>
@@ -882,7 +889,7 @@ export default function Settings() {
           { content: "Import settings", onAction: () => fileInputRef.current?.click() },
         ] : undefined}
       >
-        <Box paddingBottom="400">
+        <Box paddingBlockEnd="400">
           <InlineStack align="center" gap="200">
             <ButtonGroup variant="segmented">
               {topTabs.map((tab, index) => (
