@@ -301,7 +301,7 @@ export default function Settings() {
 
   const handleExport = () => {
     const payload = {
-      alignment, position, customSelector, filePreview, colors, toggleStates, addonMoneyFormat, addonLabelFormat
+      alignment, position, customSelector, filePreview, colors, borders, typography, toggleStates, addonMoneyFormat, addonLabelFormat
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -326,6 +326,8 @@ export default function Settings() {
         if (imported.customSelector) setCustomSelector(imported.customSelector);
         if (imported.filePreview) setFilePreview(imported.filePreview);
         if (imported.colors) setColors(imported.colors);
+        if (imported.borders) setBorders(imported.borders);
+        if (imported.typography) setTypography(imported.typography);
         if (imported.toggleStates) setToggleStates(imported.toggleStates);
         if (imported.addonMoneyFormat) setAddonMoneyFormat(imported.addonMoneyFormat);
         if (imported.addonLabelFormat) setAddonLabelFormat(imported.addonLabelFormat);
@@ -340,7 +342,7 @@ export default function Settings() {
 
   const handleSave = () => {
     const payload = {
-      alignment, position, customSelector, filePreview, colors, toggleStates, addonMoneyFormat, addonLabelFormat
+      alignment, position, customSelector, filePreview, colors, borders, typography, toggleStates, addonMoneyFormat, addonLabelFormat
     };
     submit({ payload: JSON.stringify(payload), shopId: shopId }, { method: "post" });
   };

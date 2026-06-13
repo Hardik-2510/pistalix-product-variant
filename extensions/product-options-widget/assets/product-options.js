@@ -540,6 +540,8 @@ function applyDynamicStyles(wrapper) {
   }
 
   var colors = appSettings.colors || {};
+  var borders = appSettings.borders || {};
+  var typography = appSettings.typography || {};
   var alignment = appSettings.alignment || "left";
 
   var style = document.createElement('style');
@@ -548,14 +550,30 @@ function applyDynamicStyles(wrapper) {
   // General
   css += '.cap-options-wrapper { display: flex !important; flex-wrap: wrap !important; gap: 16px !important; margin: 0 !important; text-align: ' + alignment + ' !important; background-color: ' + (colors.appBackground || 'transparent') + ' !important; }\n';
   css += '.cap-options-wrapper .cap-option-group { box-sizing: border-box !important; padding: 0 !important; margin: 0 !important; flex-shrink: 0 !important; border: none !important; }\n';
-  css += '.cap-options-wrapper .cap-label { color: ' + (colors.labelText || '#111827') + ' !important; }\n';
+  
+  var labelCSS = 'color: ' + (colors.labelText || '#111827') + ' !important;';
+  if (typography.labelCustom) {
+    labelCSS += ' font-family: "' + (typography.labelFont || 'Open Sans') + '", sans-serif !important; font-size: ' + (typography.labelSize || 14) + 'px !important;';
+  }
+  css += '.cap-options-wrapper .cap-label, .form__label { ' + labelCSS + ' }\n';
+  
   css += '.cap-options-wrapper .cap-required { color: ' + (colors.requiredCharacter || 'red') + ' !important; }\n';
-  css += '.cap-options-wrapper .cap-help-text { color: ' + (colors.helpText || '#666') + ' !important; }\n';
-  css += '.cap-options-wrapper .cap-addon-total-message { color: ' + (colors.totalText || '#202223') + ' !important; }\n';
+  
+  var helpCSS = 'color: ' + (colors.helpText || '#666') + ' !important;';
+  if (typography.helpCustom) {
+    helpCSS += ' font-family: "' + (typography.helpFont || 'Open Sans') + '", sans-serif !important; font-size: ' + (typography.helpSize || 14) + 'px !important;';
+  }
+  css += '.cap-options-wrapper .cap-help-text { ' + helpCSS + ' }\n';
+  
+  var addonCSS = 'color: ' + (colors.totalText || '#202223') + ' !important;';
+  if (typography.addonCustom) {
+    addonCSS += ' font-family: "' + (typography.addonFont || 'Open Sans') + '", sans-serif !important; font-size: ' + (typography.addonSize || 14) + 'px !important;';
+  }
+  css += '.cap-options-wrapper .cap-addon-total-message { ' + addonCSS + ' }\n';
   css += '.cap-options-wrapper .cap-addon-total-message span { color: ' + (colors.totalTextMoney || '#008000') + ' !important; }\n';
 
   // Single Input
-  css += '.cap-options-wrapper .cap-input { width: 100% !important; max-width: 100% !important; box-sizing: border-box !important; padding: 8px 12px !important; border-width: 1px !important; border-style: solid !important; border-radius: 4px !important; color: ' + (colors.inputText || '#111827') + ' !important; border-color: ' + (colors.inputBorder || '#d1d5db') + ' !important; background-color: ' + (colors.inputBackground || '#ffffff') + ' !important; }\n';
+  css += '.cap-options-wrapper .cap-input { width: 100% !important; max-width: 100% !important; box-sizing: border-box !important; padding: 8px 12px !important; border-width: ' + (borders.inputSize !== undefined ? borders.inputSize : 1) + 'px !important; border-style: solid !important; border-radius: ' + (borders.inputRadius !== undefined ? borders.inputRadius : 4) + 'px !important; color: ' + (colors.inputText || '#111827') + ' !important; border-color: ' + (colors.inputBorder || '#d1d5db') + ' !important; background-color: ' + (colors.inputBackground || '#ffffff') + ' !important; }\n';
   css += '.cap-options-wrapper .cap-switch-track { background-color: ' + (colors.switchBackground || '#dddddd') + ' !important; }\n';
   css += '.cap-options-wrapper input:checked + .cap-switch-track { background-color: ' + (colors.switchActiveBackground || '#ea1255') + ' !important; }\n';
 
@@ -564,7 +582,7 @@ function applyDynamicStyles(wrapper) {
   var ddBorder = colors.dropdownBorder || colors.inputBorder || '#d1d5db';
   var ddBg = colors.dropdownBackground || colors.inputBackground || '#ffffff';
   var ddSel = colors.dropdownSelected || '#f8e0e6';
-  css += '.cap-options-wrapper .cap-select, .cap-options-wrapper .cap-image-dropdown-selected, .cap-options-wrapper .cap-color-dropdown-selected { width: 100% !important; max-width: 100% !important; box-sizing: border-box !important; padding: 8px 12px !important; border-width: 1px !important; border-style: solid !important; border-radius: 4px !important; }\n';
+  css += '.cap-options-wrapper .cap-select, .cap-options-wrapper .cap-image-dropdown-selected, .cap-options-wrapper .cap-color-dropdown-selected { width: 100% !important; max-width: 100% !important; box-sizing: border-box !important; padding: 8px 12px !important; border-width: ' + (borders.dropdownSize !== undefined ? borders.dropdownSize : 1) + 'px !important; border-style: solid !important; border-radius: ' + (borders.dropdownRadius !== undefined ? borders.dropdownRadius : 4) + 'px !important; }\n';
   css += '.cap-options-wrapper .cap-select, .cap-options-wrapper .cap-image-dropdown-selected, .cap-options-wrapper .cap-color-dropdown-selected, .cap-options-wrapper .cap-image-dropdown-item, .cap-options-wrapper .cap-color-dropdown-item { color: ' + ddText + ' !important; background-color: ' + ddBg + ' !important; }\n';
   css += '.cap-options-wrapper .cap-select, .cap-options-wrapper .cap-image-dropdown-selected, .cap-options-wrapper .cap-color-dropdown-selected, .cap-options-wrapper .cap-image-dropdown-list, .cap-options-wrapper .cap-color-dropdown-list { border-color: ' + ddBorder + ' !important; }\n';
   css += '.cap-options-wrapper .cap-image-dropdown-item:hover, .cap-options-wrapper .cap-color-dropdown-item:hover { background-color: ' + ddSel + ' !important; }\n';
@@ -583,11 +601,25 @@ function applyDynamicStyles(wrapper) {
   var btnBgHov = colors.buttonBackgroundHover || '#ffffff';
   var btnTextAct = colors.buttonTextActive || '#ffffff';
   var btnBgAct = colors.buttonBackgroundActive || '#eb1256';
+  
+  var swB = colors.swatchBorder || '#dddddd';
+  var swBHov = colors.swatchBorderHover || '#dddddd';
+  var swBAct = colors.swatchBorderActive || '#eb1256';
+  
+  var swSize = borders.swatchSize !== undefined ? borders.swatchSize : 1;
+  var swRad = borders.swatchRadius !== undefined ? borders.swatchRadius : 4;
 
-  css += '.cap-options-wrapper .cap-button-swatch { color: ' + btnText + ' !important; background-color: ' + btnBg + ' !important; border-color: ' + (colors.inputBorder || '#d1d5db') + ' !important; }\n';
-  css += '.cap-options-wrapper .cap-button-swatch:hover { color: ' + btnTextHov + ' !important; background-color: ' + btnBgHov + ' !important; border-color: ' + btnBgHov + ' !important; }\n';
-  css += '.cap-options-wrapper .cap-button-swatch.cap-selected { color: ' + btnTextAct + ' !important; background-color: ' + btnBgAct + ' !important; border-color: ' + btnBgAct + ' !important; }\n';
-  css += '.cap-options-wrapper .cap-color-swatch.cap-selected, .cap-options-wrapper .cap-image-swatch.cap-selected { border-color: ' + btnBgAct + ' !important; }\n';
+  // Base state
+  css += '.cap-options-wrapper .cap-button-swatch { color: ' + btnText + ' !important; background-color: ' + btnBg + ' !important; border-color: ' + swB + ' !important; border-width: ' + swSize + 'px !important; border-radius: ' + swRad + 'px !important; }\n';
+  css += '.cap-options-wrapper .cap-color-swatch, .cap-options-wrapper .cap-image-swatch { border-color: ' + swB + ' !important; border-width: ' + swSize + 'px !important; border-radius: ' + swRad + 'px !important; border-style: solid !important; }\n';
+  
+  // Hover state
+  css += '.cap-options-wrapper .cap-button-swatch:hover { color: ' + btnTextHov + ' !important; background-color: ' + btnBgHov + ' !important; border-color: ' + swBHov + ' !important; }\n';
+  css += '.cap-options-wrapper .cap-color-swatch:hover, .cap-options-wrapper .cap-image-swatch:hover { border-color: ' + swBHov + ' !important; }\n';
+  
+  // Active/Selected state
+  css += '.cap-options-wrapper .cap-button-swatch.cap-selected { color: ' + btnTextAct + ' !important; background-color: ' + btnBgAct + ' !important; border-color: ' + swBAct + ' !important; }\n';
+  css += '.cap-options-wrapper .cap-color-swatch.cap-selected, .cap-options-wrapper .cap-image-swatch.cap-selected { border-color: ' + swBAct + ' !important; }\n';
 
   style.innerHTML = css;
   wrapper.appendChild(style);
