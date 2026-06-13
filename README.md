@@ -1,9 +1,9 @@
-# PistaLix Globo - Shopify App Documentation
+# Pistalix Product Variant - Shopify App Documentation
 
 ## Non-Technical Info
 
 ### Project Overview
-PistaLix Globo is a powerful Shopify application designed to help merchants bypass Shopify's default variant limits (typically 100 variants and 3 options per product). It allows store owners to create unlimited custom product options—such as text inputs, file uploads, color swatches, dropdowns, and checkboxes—and apply them to products across their storefront. By empowering merchants to offer highly customizable products, the app solves the problem of restrictive product configuration out-of-the-box, leading to enhanced shopping experiences and increased conversion rates.
+Pistalix Product Variant is a powerful Shopify application designed to help merchants bypass Shopify's default variant limits (typically 100 variants and 3 options per product). It allows store owners to create unlimited custom product options—such as text inputs, file uploads, color swatches, dropdowns, and checkboxes—and apply them to products across their storefront. By empowering merchants to offer highly customizable products, the app solves the problem of restrictive product configuration out-of-the-box, leading to enhanced shopping experiences and increased conversion rates.
 
 ### Key Features
 - **Unlimited Custom Options:** Create specialized input fields for products (e.g., Text, Dropdown, Checkbox, File Upload, Color Swatches, Image Swatches).
@@ -35,7 +35,7 @@ To display your custom product options on the storefront, you must enable the Ap
 1. Go to your Shopify Admin and navigate to **Online Store > Themes**.
 2. Click **Customize** on your active theme.
 3. On the left sidebar, click the **App embeds** icon (it looks like a block with a gear).
-4. Find **PistaLix Globo Core** (or similar) in the list and toggle the switch to **ON**.
+4. Find **Pistalix Product Variant Core** (or similar) in the list and toggle the switch to **ON**.
 5. Click **Save** in the top right corner.
 
 ### Step 2: Add the App Block to Product Pages

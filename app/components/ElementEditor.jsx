@@ -524,6 +524,87 @@ export default function ElementEditor({ element, allElements = [], onChange, onB
                 </Box>
               )}
 
+              {/* Bundle Settings */}
+              {(element.type === "Bundle" || element.type === "bundle") && (
+                <Box paddingBlockStart="400" paddingBlockEnd="400">
+                  <BlockStack gap="400">
+                    <Text variant="headingSm" as="h3">Bundle Products</Text>
+                    <Text as="p" tone="subdued" variant="bodySm">
+                      Select products from your store. Customers will be able to choose variants for each bundled product.
+                    </Text>
+                    <InlineStack>
+                      <Button
+                        onClick={async () => {
+                          const currentIds = (element.config?.bundleProducts || []).map((p) => ({ id: p.id }));
+                          const selected = await window.shopify.resourcePicker({
+                            type: "product",
+                            multiple: true,
+                            action: "select",
+                            selectionIds: currentIds,
+                          });
+                          if (selected) {
+                            const mapped = selected.map((p) => ({
+                              id: p.id,
+                              title: p.title,
+                              handle: p.handle,
+                              image: p.images?.[0]?.originalSrc || p.images?.[0]?.url || "",
+                              variants: (p.variants || []).map((v) => ({
+                                id: v.id,
+                                title: v.title,
+                                price: v.price,
+                              })),
+                            }));
+                            handleConfigChange("bundleProducts", mapped);
+                          }
+                        }}
+                      >
+                        {(element.config?.bundleProducts || []).length > 0 ? "Edit products" : "Select products"}
+                      </Button>
+                    </InlineStack>
+
+                    {(element.config?.bundleProducts || []).length > 0 && (
+                      <BlockStack gap="200">
+                        {(element.config.bundleProducts).map((product, idx) => (
+                          <Box key={product.id || idx} padding="300" borderWidth="025" borderColor="border" borderRadius="200" background="bg-surface-secondary">
+                            <InlineStack align="space-between" blockAlign="center">
+                              <InlineStack gap="300" blockAlign="center">
+                                {product.image ? (
+                                  <img
+                                    src={product.image}
+                                    alt={product.title}
+                                    style={{ width: "40px", height: "40px", objectFit: "cover", borderRadius: "6px", border: "1px solid var(--p-color-border)" }}
+                                  />
+                                ) : (
+                                  <div style={{ width: "40px", height: "40px", borderRadius: "6px", background: "var(--p-color-bg-surface-tertiary)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px" }}>📦</div>
+                                )}
+                                <BlockStack gap="0">
+                                  <Text variant="bodyMd" fontWeight="bold" as="p">{product.title}</Text>
+                                  <Text variant="bodySm" tone="subdued" as="p">
+                                    {(product.variants || []).length} variant{(product.variants || []).length !== 1 ? "s" : ""}
+                                  </Text>
+                                </BlockStack>
+                              </InlineStack>
+                              <Button
+                                variant="tertiary"
+                                tone="critical"
+                                size="slim"
+                                onClick={() => {
+                                  const updated = [...(element.config.bundleProducts || [])];
+                                  updated.splice(idx, 1);
+                                  handleConfigChange("bundleProducts", updated);
+                                }}
+                              >
+                                Remove
+                              </Button>
+                            </InlineStack>
+                          </Box>
+                        ))}
+                      </BlockStack>
+                    )}
+                  </BlockStack>
+                </Box>
+              )}
+
               <Box paddingBlockStart="400">
                 <BlockStack gap="400">
                   <Text variant="headingSm" as="h3">Advanced Features (Unlocked)</Text>
@@ -574,6 +655,15 @@ export default function ElementEditor({ element, allElements = [], onChange, onB
                         autoComplete="off"
                         helpText="Leave blank for no extra cost"
                       />
+                      {["Text", "Textarea"].includes(element.type) && (
+                        <Box paddingBlockStart="200">
+                          <Checkbox
+                            label="Charge per character"
+                            checked={element.config?.chargePerCharacter || false}
+                            onChange={(val) => handleConfigChange("chargePerCharacter", val)}
+                          />
+                        </Box>
+                      )}
                     </Box>
                   </InlineStack>
 

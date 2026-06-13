@@ -950,6 +950,68 @@ export default function ElementRenderer({ element, value, onChange }) {
       );
     }
 
+    case "bundle": {
+      const bundleProducts = config.bundleProducts || [];
+      if (bundleProducts.length === 0) {
+        return (
+          <Box>
+            <Text as="p" variant="bodySm" fontWeight="semibold">{label}</Text>
+            <Box paddingBlockStart="200">
+              <Text as="p" tone="subdued" variant="bodySm">No products selected for this bundle.</Text>
+            </Box>
+          </Box>
+        );
+      }
+      return (
+        <Box>
+          <Text as="p" variant="bodySm" fontWeight="semibold" paddingBlockEnd="200">{label}</Text>
+          <BlockStack gap="400">
+            {bundleProducts.map((product, pIdx) => {
+              const variants = product.variants || [];
+              const firstVariant = variants[0];
+              return (
+                <Box key={product.id || pIdx} paddingBlockStart="200" borderBlockStartWidth="025" borderColor="border">
+                  <BlockStack gap="200">
+                    <Text as="p" fontWeight="semibold">{product.title}</Text>
+                    {product.image && (
+                      <div style={{ width: "80px", height: "80px", border: "1px solid var(--p-color-border)", borderRadius: "8px", overflow: "hidden" }}>
+                        <img src={product.image} alt={product.title} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      </div>
+                    )}
+                    {firstVariant && (
+                      <Text as="p" tone="subdued" variant="bodySm">{firstVariant.title}</Text>
+                    )}
+                    {variants.length > 0 && (
+                      <InlineStack gap="200" wrap>
+                        {variants.map((v, vIdx) => (
+                          <div
+                            key={v.id || vIdx}
+                            style={{
+                              padding: "6px 16px",
+                              border: vIdx === 0 ? "2px solid #1a1a1a" : "1px solid var(--p-color-border)",
+                              borderRadius: "4px",
+                              cursor: "pointer",
+                              backgroundColor: vIdx === 0 ? "#1a1a1a" : "#fff",
+                              color: vIdx === 0 ? "#fff" : "#1a1a1a",
+                              fontSize: "13px",
+                              fontWeight: "600",
+                              transition: "all 0.15s ease",
+                            }}
+                          >
+                            {v.title}
+                          </div>
+                        ))}
+                      </InlineStack>
+                    )}
+                  </BlockStack>
+                </Box>
+              );
+            })}
+          </BlockStack>
+        </Box>
+      );
+    }
+
     default:
       return (
         <TextField

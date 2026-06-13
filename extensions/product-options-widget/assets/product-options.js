@@ -1,5 +1,5 @@
 /**
- * Pistalix Globo — Product Options Widget
+ * Pistalix Product Variant — Product Options Widget
  * 
  * Supports two data sources:
  * 1. Metafield (preferred): Template JSON embedded in page via Liquid
@@ -20,23 +20,23 @@ function initPistalixWidget() {
 
   var settingsAttr = container.getAttribute('data-app-settings');
   if (settingsAttr) {
-    try { 
-      capConfig.settings = JSON.parse(settingsAttr); 
+    try {
+      capConfig.settings = JSON.parse(settingsAttr);
       if (typeof capConfig.settings === 'string') {
         capConfig.settings = JSON.parse(capConfig.settings);
       }
-    } catch(e) { console.warn("Pistalix: JSON parse failed", e); }
+    } catch (e) { console.warn("Pistalix: JSON parse failed", e); }
   }
 
   var toggleStates = capConfig.settings ? capConfig.settings.toggleStates : {};
-  
+
   // Initialize cart page features globally (handles ajax carts/drawers as well)
   if (toggleStates) {
     initCartPageFeatures(toggleStates);
   }
 
   var pageType = container.getAttribute('data-page-type');
-  
+
   if (toggleStates) {
     if (pageType === 'index' && toggleStates.homePageWidget === false) {
       container.style.display = 'none';
@@ -74,7 +74,7 @@ function initPistalixWidget() {
   } else if (source === 'api') {
     var productId = container.getAttribute('data-product-id');
     var shop = container.getAttribute('data-shop');
-    
+
     if (!productId || !shop) { container.style.display = 'none'; return; }
 
     // Use Shopify App Proxy endpoint
@@ -93,7 +93,7 @@ if (document.readyState === 'loading') {
 if (!window.pistalixSubmitTrackerRegistered) {
   window.pistalixSubmitTrackerRegistered = true;
   window.pistalixLastSubmittedForm = null;
-  document.addEventListener('submit', function(e) {
+  document.addEventListener('submit', function (e) {
     window.pistalixLastSubmittedForm = e.target;
   }, true);
 }
@@ -146,7 +146,7 @@ function formatMoney(cents, format) {
   var value = '';
   var placeholderRegex = /\{\{\s*(\w+)\s*\}\}/;
   var formatString = format || '${{amount}}';
-  
+
   function defaultTo(val, def) {
     return val == null || val !== val ? def : val;
   }
@@ -165,7 +165,7 @@ function formatMoney(cents, format) {
   var match = formatString.match(placeholderRegex);
   if (!match) return formatWithDelimiters(cents, 2);
 
-  switch(match[1]) {
+  switch (match[1]) {
     case 'amount':
       value = formatWithDelimiters(cents, 2);
       break;
@@ -191,13 +191,13 @@ function getOptionLabel(opt) {
     var settings = capConfig.settings || {};
     var addonMoneyFormat = settings.addonMoneyFormat || "With currency";
     var addonLabelFormat = settings.addonLabelFormat || "(+ {{addon}})";
-    
+
     var formattedMoney = formatMoney(cents, capConfig.moneyFormat);
     if (addonMoneyFormat === "Without currency") {
       // Just extract the number with decimals/commas
       formattedMoney = formatMoney(cents, '{{amount}}');
     }
-    
+
     var addonString = addonLabelFormat.replace('{{addon}}', formattedMoney);
     return opt.label + ' ' + addonString;
   }
@@ -218,7 +218,7 @@ function updateTotalPrice() {
   var totalAddonCents = 0;
   // Selects
   var selects = document.querySelectorAll('.cap-options-wrapper select.cap-select');
-  selects.forEach(function(select) {
+  selects.forEach(function (select) {
     var group = select.closest('.cap-option-group');
     if (group && group.style.display === 'none') return;
 
@@ -233,7 +233,7 @@ function updateTotalPrice() {
 
   // Radios and Checkboxes
   var inputs = document.querySelectorAll('.cap-options-wrapper input[type="radio"]:checked, .cap-options-wrapper input[type="checkbox"]:checked');
-  inputs.forEach(function(input) {
+  inputs.forEach(function (input) {
     var group = input.closest('.cap-option-group');
     if (group && group.style.display === 'none') return;
 
@@ -243,19 +243,23 @@ function updateTotalPrice() {
 
   // Text, Textarea, Number, Email, Phone
   var textInputs = document.querySelectorAll('.cap-options-wrapper input[type="text"], .cap-options-wrapper input[type="email"], .cap-options-wrapper input[type="tel"], .cap-options-wrapper input[type="number"], .cap-options-wrapper textarea');
-  textInputs.forEach(function(input) {
+  textInputs.forEach(function (input) {
     var group = input.closest('.cap-option-group');
     if (group && group.style.display === 'none') return;
 
     if (input.value && input.value.trim() !== '') {
       var p = parseInt(input.getAttribute('data-price') || '0', 10);
+      var perChar = input.getAttribute('data-charge-per-char') === 'true';
+      if (perChar) {
+        p = p * input.value.length;
+      }
       totalAddonCents += p;
     }
   });
 
   // Swatches (Button, Color, Image)
   var swatches = document.querySelectorAll('.cap-options-wrapper .cap-selected');
-  swatches.forEach(function(swatch) {
+  swatches.forEach(function (swatch) {
     var group = swatch.closest('.cap-option-group');
     if (group && group.style.display === 'none') return;
 
@@ -263,13 +267,29 @@ function updateTotalPrice() {
     totalAddonCents += p;
   });
 
+  // Bundle Hidden Price Inputs
+  var priceInputs = document.querySelectorAll('.cap-options-wrapper .cap-price-input');
+  var hasUnavailableBundle = false;
+  priceInputs.forEach(function (input) {
+    var group = input.closest('.cap-option-group');
+    if (group && group.style.display === 'none') return;
+
+    if (input.getAttribute('data-available') === 'false') {
+      hasUnavailableBundle = true;
+    }
+
+    var p = parseInt(input.getAttribute('data-price') || '0', 10);
+    totalAddonCents += p;
+  });
+
+
   var finalPriceCents = capConfig.basePrice + totalAddonCents;
   var formattedPrice = formatMoney(finalPriceCents, capConfig.moneyFormat);
 
   // Update Cart Transform Hidden Inputs
   var wrapper = document.querySelector('.cap-options-wrapper');
   if (wrapper && totalAddonCents !== 0) {
-    var ensureHiddenInput = function(name, val) {
+    var ensureHiddenInput = function (name, val) {
       var inp = wrapper.querySelector('input[name="' + name + '"]');
       if (!inp) {
         inp = document.createElement('input');
@@ -291,7 +311,7 @@ function updateTotalPrice() {
   } else if (wrapper) {
     // If no addons, remove the inputs so cart transform ignores this line
     var fields = wrapper.querySelectorAll('input[name="properties[_base_price]"], input[name="properties[_final_price]"], input[name="properties[_price_adjustments]"]');
-    fields.forEach(function(f) { f.remove(); });
+    fields.forEach(function (f) { f.remove(); });
   }
 
   var toggleStates = capConfig.settings ? capConfig.settings.toggleStates : {};
@@ -310,10 +330,12 @@ function updateTotalPrice() {
         existingTotalLine.style.borderTop = '1px solid #e5e7eb';
         existingTotalLine.style.fontWeight = 'normal';
         existingTotalLine.style.fontSize = '16px';
+        existingTotalLine.style.setProperty('flex', '0 0 100%', 'important');
+        existingTotalLine.style.setProperty('display', 'block', 'important');
         wrapper.appendChild(existingTotalLine);
       }
       var formattedAddonMoney = formatMoney(totalAddonCents, capConfig.moneyFormat);
-      existingTotalLine.innerHTML = 'Selections will add <span>' + formattedAddonMoney + '</span> to the price';
+      existingTotalLine.innerHTML = '<div style="display:block !important; white-space:nowrap !important; width:100% !important;">Selections will add <span style="display:inline !important;font-weight:600;">' + formattedAddonMoney + '</span> to the price</div>';
     } else if (existingTotalLine) {
       existingTotalLine.remove();
     }
@@ -333,16 +355,47 @@ function updateTotalPrice() {
       '[data-product-price]',
       '.product-price'
     ];
-    
-    selectors.forEach(function(sel) {
-      document.querySelectorAll(sel).forEach(function(el) {
+
+    selectors.forEach(function (sel) {
+      document.querySelectorAll(sel).forEach(function (el) {
         // Don't update the strikethrough compare-at price when on sale
         if (el.closest('.price--on-sale') && !el.closest('.price__sale')) return;
-        
+
         // Update DOM
         el.innerHTML = formattedPrice;
       });
     });
+
+    // Update Add to Cart button text
+    var addToCartBtn = document.querySelector('button[name="add"], .product-form__submit, #AddToCart, .add-to-cart');
+    if (addToCartBtn) {
+      // Find the text node or span inside the button
+      var btnTextSpan = addToCartBtn.querySelector('span');
+      if (!btnTextSpan) {
+        var originalText = addToCartBtn.textContent;
+        addToCartBtn.innerHTML = '';
+        btnTextSpan = document.createElement('span');
+        btnTextSpan.textContent = originalText;
+        addToCartBtn.appendChild(btnTextSpan);
+      }
+
+      if (!addToCartBtn.hasAttribute('data-original-text')) {
+        addToCartBtn.setAttribute('data-original-text', btnTextSpan.textContent.trim());
+      }
+
+      var original = addToCartBtn.getAttribute('data-original-text');
+      if (hasUnavailableBundle) {
+        btnTextSpan.textContent = 'Sold out';
+        addToCartBtn.disabled = true;
+      } else if (original.toLowerCase().indexOf('sold out') === -1 && original.toLowerCase().indexOf('unavailable') === -1) {
+        addToCartBtn.disabled = false;
+        if (totalAddonCents > 0 || capConfig.basePrice > 0) {
+          btnTextSpan.textContent = 'Add to cart • ' + formattedPrice;
+        } else {
+          btnTextSpan.textContent = original || 'Add to cart';
+        }
+      }
+    }
   }
 }
 
@@ -380,10 +433,13 @@ function createGroup(element) {
   }
   group.appendChild(labelWrap);
 
-  if (element.subtext) {
+  var config = typeof element.config === 'string' ? JSON.parse(element.config) : (element.config || {});
+  var helpText = element.subtext || config.helpText;
+
+  if (helpText) {
     var help = document.createElement('div');
     help.className = 'cap-help-text';
-    help.textContent = element.subtext;
+    help.textContent = helpText;
     group.appendChild(help);
   }
   return group;
@@ -412,7 +468,7 @@ function renderTemplate(template, container) {
 
   var elements = template.elements;
 
-  elements.forEach(function(element) {
+  elements.forEach(function (element) {
     var typeLower = (element.type || '').toLowerCase();
     var elDOM = null;
 
@@ -435,6 +491,7 @@ function renderTemplate(template, container) {
     else if (typeLower === 'html') elDOM = renderHTML(element);
     else if (typeLower === 'spacing') elDOM = renderSpacing(element);
     else if (typeLower === 'switch') elDOM = renderSwitch(element);
+    else if (typeLower === 'bundle') elDOM = renderBundle(element);
     else elDOM = null;
 
     if (elDOM) {
@@ -445,7 +502,7 @@ function renderTemplate(template, container) {
       else if (width === '33%') flexBasis = 'calc(33.333% - 10.66px)';
       else if (width === '25%') flexBasis = 'calc(25% - 12px)';
       else if (width.indexOf('%') > -1 && width !== '100%') flexBasis = 'calc(' + width + ' - 16px)';
-      
+
       elDOM.style.setProperty('flex', '0 0 ' + flexBasis, 'important');
       elDOM.style.setProperty('max-width', flexBasis, 'important');
       wrapper.appendChild(elDOM);
@@ -472,18 +529,19 @@ function renderTemplate(template, container) {
   injectIntoCartForm(wrapper, container);
 
   // Initialize total price taking into account default selections
+  updateTotalPrice(); // Evaluate immediately to prevent flicker
   setTimeout(updateTotalPrice, 100);
 }
 
 function applyDynamicStyles(wrapper) {
   var appSettings = capConfig.settings || {};
   if (typeof appSettings === 'string') {
-    try { appSettings = JSON.parse(appSettings); } catch(e) { console.warn("Pistalix: settings parse failed", e); }
+    try { appSettings = JSON.parse(appSettings); } catch (e) { console.warn("Pistalix: settings parse failed", e); }
   }
-  
+
   var colors = appSettings.colors || {};
   var alignment = appSettings.alignment || "left";
-  
+
   var style = document.createElement('style');
   var css = '';
 
@@ -525,7 +583,7 @@ function applyDynamicStyles(wrapper) {
   var btnBgHov = colors.buttonBackgroundHover || '#ffffff';
   var btnTextAct = colors.buttonTextActive || '#ffffff';
   var btnBgAct = colors.buttonBackgroundActive || '#eb1256';
-  
+
   css += '.cap-options-wrapper .cap-button-swatch { color: ' + btnText + ' !important; background-color: ' + btnBg + ' !important; border-color: ' + (colors.inputBorder || '#d1d5db') + ' !important; }\n';
   css += '.cap-options-wrapper .cap-button-swatch:hover { color: ' + btnTextHov + ' !important; background-color: ' + btnBgHov + ' !important; border-color: ' + btnBgHov + ' !important; }\n';
   css += '.cap-options-wrapper .cap-button-swatch.cap-selected { color: ' + btnTextAct + ' !important; background-color: ' + btnBgAct + ' !important; border-color: ' + btnBgAct + ' !important; }\n';
@@ -545,10 +603,10 @@ function validateCustomOptions() {
   if (!wrapper) return true;
 
   // Clear previous errors
-  wrapper.querySelectorAll('.cap-error').forEach(function(msg) { msg.classList.remove('visible'); });
-  wrapper.querySelectorAll('.error').forEach(function(el) { el.classList.remove('error'); });
+  wrapper.querySelectorAll('.cap-error').forEach(function (msg) { msg.classList.remove('visible'); });
+  wrapper.querySelectorAll('.error').forEach(function (el) { el.classList.remove('error'); });
 
-  wrapper.querySelectorAll('.cap-option-group[data-required="true"]').forEach(function(group) {
+  wrapper.querySelectorAll('.cap-option-group[data-required="true"]').forEach(function (group) {
     if (group.style.display === 'none') return;
     var type = group.getAttribute('data-type');
     var isGroupValid = true;
@@ -589,9 +647,9 @@ function validateCustomOptions() {
     }
   });
 
-  wrapper.querySelectorAll('.cap-option-group[data-type="Checkbox"]').forEach(function(group) {
+  wrapper.querySelectorAll('.cap-option-group[data-type="Checkbox"]').forEach(function (group) {
     if (group.style.display === 'none') return;
-    var checked = Array.from(group.querySelectorAll('input[type="checkbox"]:checked')).map(function(cb) { return cb.value; });
+    var checked = Array.from(group.querySelectorAll('input[type="checkbox"]:checked')).map(function (cb) { return cb.value; });
     var hiddenInput = group.querySelector('input[type="hidden"]');
     if (hiddenInput) hiddenInput.value = checked.join(', ');
   });
@@ -608,7 +666,7 @@ function validateCustomOptions() {
 
 function injectIntoCartForm(wrapper, container) {
   var cartForm = container.closest('form[action*="/cart/add"], form');
-  
+
   if (!cartForm) {
     // Traverse up to find the closest product section form
     var parent = container.parentElement;
@@ -627,9 +685,9 @@ function injectIntoCartForm(wrapper, container) {
   var appSettings = {};
   var settingsAttr = container.getAttribute('data-app-settings');
   if (settingsAttr) {
-    try { appSettings = JSON.parse(settingsAttr); } catch(e) { console.warn("Pistalix: container settings parse failed", e); }
+    try { appSettings = JSON.parse(settingsAttr); } catch (e) { console.warn("Pistalix: container settings parse failed", e); }
   }
-  
+
   var position = appSettings.position || "Above add to cart button";
   var customSelector = appSettings.customSelector;
 
@@ -675,8 +733,8 @@ function injectIntoCartForm(wrapper, container) {
   var formId = cartForm.getAttribute('id');
   if (formId) {
     wrapper.setAttribute('data-form-id', formId);
-    var bindInputs = function() {
-      wrapper.querySelectorAll('input, select, textarea').forEach(function(inp) {
+    var bindInputs = function () {
+      wrapper.querySelectorAll('input, select, textarea').forEach(function (inp) {
         inp.setAttribute('form', formId);
       });
     };
@@ -686,7 +744,7 @@ function injectIntoCartForm(wrapper, container) {
     observer.observe(wrapper, { childList: true, subtree: true });
   }
 
-  cartForm.addEventListener('submit', function(e) {
+  cartForm.addEventListener('submit', function (e) {
     if (!validateCustomOptions()) {
       e.preventDefault();
       e.stopImmediatePropagation();
@@ -698,7 +756,7 @@ function injectIntoCartForm(wrapper, container) {
   if (!window.pistalixFetchIntercepted) {
     window.pistalixFetchIntercepted = true;
     var originalFetch = window.fetch;
-    window.fetch = function() {
+    window.fetch = function () {
       var url = arguments[0];
       var config = arguments[1];
       if (url && typeof url === 'string' && url.indexOf('/cart/add') !== -1) {
@@ -716,7 +774,7 @@ function injectIntoCartForm(wrapper, container) {
           if (wrapperEl) {
             var inputs = wrapperEl.querySelectorAll('[name^="properties["]');
             if (config.body instanceof FormData) {
-              inputs.forEach(function(inp) {
+              inputs.forEach(function (inp) {
                 if (inp.type === 'radio' && !inp.checked) return;
                 if (inp.type === 'checkbox' && !inp.checked) return;
                 if (inp.disabled) return;
@@ -729,7 +787,7 @@ function injectIntoCartForm(wrapper, container) {
                 try {
                   var json = JSON.parse(config.body);
                   if (!json.properties) json.properties = {};
-                  inputs.forEach(function(inp) {
+                  inputs.forEach(function (inp) {
                     if (inp.type === 'radio' && !inp.checked) return;
                     if (inp.type === 'checkbox' && !inp.checked) return;
                     if (inp.disabled) return;
@@ -747,7 +805,7 @@ function injectIntoCartForm(wrapper, container) {
               } else {
                 try {
                   var params = new URLSearchParams(config.body);
-                  inputs.forEach(function(inp) {
+                  inputs.forEach(function (inp) {
                     if (inp.type === 'radio' && !inp.checked) return;
                     if (inp.type === 'checkbox' && !inp.checked) return;
                     if (inp.disabled) return;
@@ -773,17 +831,17 @@ function injectIntoCartForm(wrapper, container) {
     window.pistalixXhrIntercepted = true;
     var originalOpen = window.XMLHttpRequest.prototype.open;
     var originalSend = window.XMLHttpRequest.prototype.send;
-    
-    window.XMLHttpRequest.prototype.open = function(method, url) {
+
+    window.XMLHttpRequest.prototype.open = function (method, url) {
       this._url = url;
       return originalOpen.apply(this, arguments);
     };
 
-    window.XMLHttpRequest.prototype.send = function(body) {
+    window.XMLHttpRequest.prototype.send = function (body) {
       if (this._url && typeof this._url === 'string' && this._url.indexOf('/cart/add') !== -1) {
         if (!validateCustomOptions()) {
           var self = this;
-          setTimeout(function() {
+          setTimeout(function () {
             self.dispatchEvent(new Event('error'));
           }, 0);
           return;
@@ -800,7 +858,7 @@ function injectIntoCartForm(wrapper, container) {
         if (wrapperEl && body) {
           var inputs = wrapperEl.querySelectorAll('[name^="properties["]');
           if (body instanceof FormData) {
-            inputs.forEach(function(inp) {
+            inputs.forEach(function (inp) {
               if (inp.type === 'radio' && !inp.checked) return;
               if (inp.type === 'checkbox' && !inp.checked) return;
               if (inp.disabled) return;
@@ -813,7 +871,7 @@ function injectIntoCartForm(wrapper, container) {
               try {
                 var json = JSON.parse(body);
                 if (!json.properties) json.properties = {};
-                inputs.forEach(function(inp) {
+                inputs.forEach(function (inp) {
                   if (inp.type === 'radio' && !inp.checked) return;
                   if (inp.type === 'checkbox' && !inp.checked) return;
                   if (inp.disabled) return;
@@ -831,7 +889,7 @@ function injectIntoCartForm(wrapper, container) {
             } else {
               try {
                 var params = new URLSearchParams(body);
-                inputs.forEach(function(inp) {
+                inputs.forEach(function (inp) {
                   if (inp.type === 'radio' && !inp.checked) return;
                   if (inp.type === 'checkbox' && !inp.checked) return;
                   if (inp.disabled) return;
@@ -877,7 +935,7 @@ function renderText(element) {
 
   // Apply allowedValue
   if (config.allowedValue === "Letters" || config.allowedValue === "Letters & numbers") {
-    input.addEventListener('input', function() {
+    input.addEventListener('input', function () {
       var regex = config.allowedValue === "Letters" ? /[^a-zA-Z\s]/g : /[^a-zA-Z0-9\s]/g;
       var newVal = this.value.replace(regex, "");
       if (newVal !== this.value) {
@@ -899,6 +957,7 @@ function renderText(element) {
   var p = parseFloat(config.price);
   if (!isNaN(p) && p > 0) {
     input.setAttribute('data-price', Math.round(p * 100));
+    if (config.chargePerCharacter) input.setAttribute('data-charge-per-char', 'true');
   }
 
   // Prefix / Suffix wrapper
@@ -906,7 +965,7 @@ function renderText(element) {
     var wrapper = document.createElement('div');
     wrapper.style.display = 'flex';
     wrapper.style.alignItems = 'center';
-    
+
     if (config.prefixType === "Text" && config.prefixText) {
       var prefix = document.createElement('span');
       prefix.textContent = config.prefixText;
@@ -914,7 +973,7 @@ function renderText(element) {
       prefix.style.color = 'var(--p-color-text-subdued, #666)';
       wrapper.appendChild(prefix);
     }
-    
+
     input.style.flex = '1';
     wrapper.appendChild(input);
 
@@ -925,14 +984,14 @@ function renderText(element) {
       suffix.style.color = 'var(--p-color-text-subdued, #666)';
       wrapper.appendChild(suffix);
     }
-    
+
     group.appendChild(wrapper);
   } else {
     group.appendChild(input);
   }
 
   var maxL = config.maxCharacter;
-  var showCount = config.characterCounter || maxL;
+  var showCount = config.characterCounter === true || String(config.characterCounter) === 'true';
   if (showCount) {
     var counter = document.createElement('div');
     counter.className = 'cap-character-counter';
@@ -940,8 +999,8 @@ function renderText(element) {
     counter.style.color = 'var(--p-color-text-subdued, #666)';
     counter.style.fontSize = '13px';
     counter.style.marginTop = '4px';
-    
-    var updateCounter = function() {
+
+    var updateCounter = function () {
       var len = input.value.length;
       counter.textContent = maxL ? len + '/' + maxL + ' characters' : len + ' characters';
     };
@@ -977,7 +1036,7 @@ function renderTextarea(element) {
 
   // Apply allowedValue
   if (config.allowedValue === "Letters" || config.allowedValue === "Letters & numbers") {
-    textarea.addEventListener('input', function() {
+    textarea.addEventListener('input', function () {
       var regex = config.allowedValue === "Letters" ? /[^a-zA-Z\s]/g : /[^a-zA-Z0-9\s]/g;
       var newVal = this.value.replace(regex, "");
       if (newVal !== this.value) {
@@ -999,6 +1058,7 @@ function renderTextarea(element) {
   var p = parseFloat(config.price);
   if (!isNaN(p) && p > 0) {
     textarea.setAttribute('data-price', Math.round(p * 100));
+    if (config.chargePerCharacter) textarea.setAttribute('data-charge-per-char', 'true');
   }
 
   // Prefix / Suffix wrapper
@@ -1006,7 +1066,7 @@ function renderTextarea(element) {
     var wrapper = document.createElement('div');
     wrapper.style.display = 'flex';
     wrapper.style.alignItems = 'flex-start';
-    
+
     if (config.prefixType === "Text" && config.prefixText) {
       var prefix = document.createElement('span');
       prefix.textContent = config.prefixText;
@@ -1015,7 +1075,7 @@ function renderTextarea(element) {
       prefix.style.color = 'var(--p-color-text-subdued, #666)';
       wrapper.appendChild(prefix);
     }
-    
+
     textarea.style.flex = '1';
     wrapper.appendChild(textarea);
 
@@ -1027,14 +1087,14 @@ function renderTextarea(element) {
       suffix.style.color = 'var(--p-color-text-subdued, #666)';
       wrapper.appendChild(suffix);
     }
-    
+
     group.appendChild(wrapper);
   } else {
     group.appendChild(textarea);
   }
 
   var maxL = config.maxCharacter;
-  var showCount = config.characterCounter || maxL;
+  var showCount = config.characterCounter === true || String(config.characterCounter) === 'true';
   if (showCount) {
     var counter = document.createElement('div');
     counter.className = 'cap-character-counter';
@@ -1042,8 +1102,8 @@ function renderTextarea(element) {
     counter.style.color = 'var(--p-color-text-subdued, #666)';
     counter.style.fontSize = '13px';
     counter.style.marginTop = '4px';
-    
-    var updateCounter = function() {
+
+    var updateCounter = function () {
       var len = textarea.value.length;
       counter.textContent = maxL ? len + '/' + maxL + ' characters' : len + ' characters';
     };
@@ -1065,7 +1125,7 @@ function renderNumber(element) {
   input.className = 'cap-input';
   if (config.placeholder) input.placeholder = config.placeholder;
   if (config.defaultValue) input.value = config.defaultValue;
-  
+
   var p = parseFloat(config.price);
   if (!isNaN(p) && p > 0) {
     input.setAttribute('data-price', Math.round(p * 100));
@@ -1086,7 +1146,7 @@ function renderNumber(element) {
     var wrapper = document.createElement('div');
     wrapper.style.display = 'flex';
     wrapper.style.alignItems = 'center';
-    
+
     if (config.prefixType === "Text" && config.prefixText) {
       var prefix = document.createElement('span');
       prefix.textContent = config.prefixText;
@@ -1094,7 +1154,7 @@ function renderNumber(element) {
       prefix.style.color = 'var(--p-color-text-subdued, #666)';
       wrapper.appendChild(prefix);
     }
-    
+
     input.style.flex = '1';
     wrapper.appendChild(input);
 
@@ -1105,7 +1165,7 @@ function renderNumber(element) {
       suffix.style.color = 'var(--p-color-text-subdued, #666)';
       wrapper.appendChild(suffix);
     }
-    
+
     group.appendChild(wrapper);
   } else {
     group.appendChild(input);
@@ -1131,16 +1191,7 @@ function renderDropdown(element) {
   var config = parseConfig(element.config);
   var choices = getChoices(config);
 
-  var hasExplicitDefault = false;
-  for (var idx = 0; idx < choices.length; idx++) {
-    if (isDefault(choices[idx])) {
-      hasExplicitDefault = true;
-      break;
-    }
-  }
-  if (!hasExplicitDefault && choices.length > 0) {
-    choices[0].default = true;
-  }
+
 
   var select = document.createElement('select');
   select.name = propName(element.label);
@@ -1151,7 +1202,7 @@ function renderDropdown(element) {
   defaultOpt.textContent = '-- Select ' + element.label + ' --';
   select.appendChild(defaultOpt);
 
-  choices.forEach(function(opt) {
+  choices.forEach(function (opt) {
     var option = document.createElement('option');
     option.value = opt.value || opt.label;
     option.textContent = getOptionLabel(opt);
@@ -1171,16 +1222,7 @@ function renderColorDropdown(element) {
   var config = parseConfig(element.config);
   var choices = getChoices(config);
 
-  var hasExplicitDefault = false;
-  for (var idx = 0; idx < choices.length; idx++) {
-    if (isDefault(choices[idx])) {
-      hasExplicitDefault = true;
-      break;
-    }
-  }
-  if (!hasExplicitDefault && choices.length > 0) {
-    choices[0].default = true;
-  }
+
 
   var selectedDisplay = document.createElement('div');
   selectedDisplay.className = 'cap-color-dropdown-selected';
@@ -1207,7 +1249,7 @@ function renderColorDropdown(element) {
   defaultOpt.textContent = '-- Select ' + element.label + ' --';
   select.appendChild(defaultOpt);
 
-  choices.forEach(function(opt) {
+  choices.forEach(function (opt) {
     var option = document.createElement('option');
     option.value = opt.value || opt.label;
     option.textContent = getOptionLabel(opt);
@@ -1220,7 +1262,7 @@ function renderColorDropdown(element) {
   optionsList.className = 'cap-color-dropdown-list';
   optionsList.style.display = 'none';
 
-  choices.forEach(function(opt) {
+  choices.forEach(function (opt) {
     var item = document.createElement('div');
     item.className = 'cap-color-dropdown-item';
 
@@ -1235,7 +1277,7 @@ function renderColorDropdown(element) {
     item.setAttribute('data-price', getOptionPriceCents(opt));
     item.appendChild(label);
 
-    item.addEventListener('click', function() {
+    item.addEventListener('click', function () {
       hiddenInput.value = opt.value || opt.label;
       select.value = opt.value || opt.label;
       selectedText.textContent = getOptionLabel(opt);
@@ -1261,11 +1303,11 @@ function renderColorDropdown(element) {
   var dropdownWrap = document.createElement('div');
   dropdownWrap.className = 'cap-color-dropdown-wrap';
 
-  selectedDisplay.addEventListener('click', function() {
+  selectedDisplay.addEventListener('click', function () {
     optionsList.style.display = optionsList.style.display === 'none' ? 'block' : 'none';
   });
 
-  document.addEventListener('click', function(e) {
+  document.addEventListener('click', function (e) {
     if (!group.contains(e.target)) {
       optionsList.style.display = 'none';
     }
@@ -1285,7 +1327,7 @@ function renderSwitch(element) {
   var group = createGroup(element);
   var config = parseConfig(element.config);
   var defaultValue = config.defaultValue === true || String(config.defaultValue) === 'true';
-  
+
   var colors = (capConfig.settings && capConfig.settings.colors) ? capConfig.settings.colors : {};
   var activeColor = colors.switchActiveBackground || '#ea1255';
   var inactiveColor = colors.switchBackground || '#dddddd';
@@ -1343,7 +1385,7 @@ function renderSwitch(element) {
   labelText.textContent = defaultValue ? (config.labelOn || 'ON') : (config.labelOff || 'OFF');
   wrap.appendChild(labelText);
 
-  toggle.addEventListener('click', function() {
+  toggle.addEventListener('click', function () {
     var isTrue = hiddenInput.value === 'true';
     if (isTrue) {
       hiddenInput.value = 'false';
@@ -1367,21 +1409,260 @@ function renderSwitch(element) {
 }
 
 
+function renderBundle(element) {
+  var group = createGroup(element);
+  var config = parseConfig(element.config);
+  var bundleProducts = config.bundleProducts || [];
+
+  if (bundleProducts.length === 0) {
+    var emptyMsg = document.createElement('p');
+    emptyMsg.textContent = 'No products in this bundle.';
+    emptyMsg.style.cssText = 'color:#6d7175;font-size:14px;margin:0;';
+    group.appendChild(emptyMsg);
+    return group;
+  }
+
+  // Hidden input to store serialized bundle selections
+  var hiddenInput = document.createElement('input');
+  hiddenInput.type = 'hidden';
+  hiddenInput.name = 'properties[_' + element.label + ']';
+  hiddenInput.value = '';
+  group.appendChild(hiddenInput);
+
+  var bundleState = {};
+
+  function updateBundleValue() {
+    var selections = [];
+    for (var key in bundleState) {
+      if (bundleState[key]) {
+        selections.push(bundleState[key]);
+      }
+    }
+    hiddenInput.value = JSON.stringify(selections);
+    hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+    hiddenInput.dispatchEvent(new Event('input', { bubbles: true }));
+    updateTotalPrice();
+  }
+
+  bundleProducts.forEach(function (product, pIdx) {
+    var productCard = document.createElement('div');
+    productCard.className = 'cap-bundle-product';
+    productCard.style.cssText = [
+      'padding:16px 0',
+      'border-top:1px solid #e1e3e5',
+    ].join(';');
+    if (pIdx === 0) productCard.style.borderTop = 'none';
+
+    // Product title
+    var title = document.createElement('a');
+    title.href = '/products/' + product.handle;
+    title.target = '_blank';
+    title.className = 'cap-label-text';
+    title.textContent = product.title;
+    title.style.cssText = 'display:block;color:inherit;text-decoration:none;font-weight:600;font-size:15px;margin-bottom:8px;';
+    productCard.appendChild(title);
+
+    // Product image
+    if (product.image) {
+      var imgWrap = document.createElement('a');
+      imgWrap.href = '/products/' + product.handle;
+      imgWrap.target = '_blank';
+      imgWrap.style.cssText = 'display:block;width:80px;height:80px;border:1px solid #e1e3e5;border-radius:8px;overflow:hidden;margin-bottom:8px;';
+      var img = document.createElement('img');
+      img.src = product.image;
+      img.alt = product.title;
+      img.style.cssText = 'width:100%;height:100%;object-fit:cover;';
+      imgWrap.appendChild(img);
+      productCard.appendChild(imgWrap);
+    }
+
+    // Variant label area
+    var variantLabel = document.createElement('div');
+    variantLabel.className = 'cap-bundle-variant-label';
+    variantLabel.style.cssText = 'font-size:13px;color:#6d7175;margin-bottom:6px;';
+    productCard.appendChild(variantLabel);
+
+    // Variant swatches container
+    var swatchWrap = document.createElement('div');
+    swatchWrap.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;';
+    productCard.appendChild(swatchWrap);
+
+    // Loading indicator
+    var loadingEl = document.createElement('div');
+    loadingEl.textContent = 'Loading variants...';
+    loadingEl.style.cssText = 'font-size:13px;color:#8c9196;padding:4px 0;';
+    swatchWrap.appendChild(loadingEl);
+
+    // Fetch live variants from Shopify AJAX API
+    var handle = product.handle;
+    if (handle) {
+      fetch('/products/' + handle + '.js')
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+          swatchWrap.innerHTML = '';
+          var variants = data.variants || [];
+
+          if (variants.length === 0) {
+            var noVar = document.createElement('span');
+            noVar.textContent = 'No variants available';
+            noVar.style.cssText = 'font-size:13px;color:#8c9196;';
+            swatchWrap.appendChild(noVar);
+            return;
+          }
+
+          // Set first available variant as default
+          var defaultVarIdx = 0;
+          for (var i = 0; i < variants.length; i++) {
+            if (variants[i].available) {
+              defaultVarIdx = i;
+              break;
+            }
+          }
+          var firstVar = variants[defaultVarIdx];
+
+          variantLabel.textContent = firstVar.title;
+          bundleState[product.id] = {
+            productId: product.id,
+            productTitle: product.title,
+            variantId: firstVar.id,
+            variantTitle: firstVar.title,
+            price: firstVar.price,
+            available: firstVar.available
+          };
+
+          // Price hidden input for this product (to integrate with updateTotalPrice)
+          var priceInput = document.createElement('input');
+          priceInput.type = 'hidden';
+          priceInput.className = 'cap-price-input';
+          priceInput.setAttribute('data-price', firstVar.price);
+          priceInput.setAttribute('data-available', firstVar.available !== false ? 'true' : 'false');
+          priceInput.value = firstVar.title;
+          priceInput.name = propName(product.title + ' variant');
+          productCard.appendChild(priceInput);
+
+          variants.forEach(function (variant, vIdx) {
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.textContent = variant.title;
+            btn.className = 'cap-bundle-variant-btn';
+            btn.style.cssText = [
+              'padding:6px 16px',
+              'border-radius:4px',
+              'cursor:pointer',
+              'font-size:13px',
+              'font-weight:600',
+              'transition:all 0.15s ease',
+              'border:' + (vIdx === defaultVarIdx ? '2px solid #1a1a1a' : '1px solid #e1e3e5'),
+              'background:' + (vIdx === defaultVarIdx ? '#1a1a1a' : '#fff'),
+              'color:' + (vIdx === defaultVarIdx ? '#fff' : '#1a1a1a'),
+            ].join(';');
+
+            if (!variant.available) {
+              btn.style.opacity = '0.4';
+              btn.style.cursor = 'not-allowed';
+              btn.style.textDecoration = 'line-through';
+            }
+
+            btn.addEventListener('click', function () {
+              if (!variant.available) return;
+
+              // Update all buttons in this swatch group
+              var allBtns = swatchWrap.querySelectorAll('.cap-bundle-variant-btn');
+              for (var b = 0; b < allBtns.length; b++) {
+                allBtns[b].style.border = '1px solid #e1e3e5';
+                allBtns[b].style.background = '#fff';
+                allBtns[b].style.color = '#1a1a1a';
+              }
+              btn.style.border = '2px solid #1a1a1a';
+              btn.style.background = '#1a1a1a';
+              btn.style.color = '#fff';
+
+              // Update variant label
+              variantLabel.textContent = variant.title;
+
+              // Update image if variant has one
+              if (variant.featured_image && variant.featured_image.src && imgWrap) {
+                var existingImg = imgWrap.querySelector('img');
+                if (existingImg) existingImg.src = variant.featured_image.src;
+              }
+
+              // Update price tooltip
+              var priceFmt = (variant.price / 100).toFixed(2);
+              btn.title = variant.title + ' (+$' + priceFmt + ')';
+
+              // Update hidden price input
+              priceInput.setAttribute('data-price', variant.price);
+              priceInput.setAttribute('data-available', variant.available !== false ? 'true' : 'false');
+              priceInput.value = variant.title;
+
+              // Update bundle state
+              bundleState[product.id] = {
+                productId: product.id,
+                productTitle: product.title,
+                variantId: variant.id,
+                variantTitle: variant.title,
+                price: variant.price,
+                available: variant.available
+              };
+
+              updateBundleValue();
+            });
+
+            swatchWrap.appendChild(btn);
+          });
+
+          updateBundleValue();
+        })
+        .catch(function () {
+          swatchWrap.innerHTML = '';
+          var errEl = document.createElement('span');
+          errEl.textContent = 'Could not load variants';
+          errEl.style.cssText = 'font-size:13px;color:#d72c0d;';
+          swatchWrap.appendChild(errEl);
+        });
+    } else {
+      // No handle — use stored variants from config
+      swatchWrap.innerHTML = '';
+      var storedVariants = product.variants || [];
+      if (storedVariants.length === 0) {
+        var noVarEl = document.createElement('span');
+        noVarEl.textContent = 'No variants';
+        noVarEl.style.cssText = 'font-size:13px;color:#8c9196;';
+        swatchWrap.appendChild(noVarEl);
+      } else {
+        variantLabel.textContent = storedVariants[0].title;
+        storedVariants.forEach(function (v, vIdx) {
+          var btn = document.createElement('button');
+          btn.type = 'button';
+          btn.textContent = v.title;
+          btn.style.cssText = [
+            'padding:6px 16px',
+            'border-radius:4px',
+            'cursor:pointer',
+            'font-size:13px',
+            'font-weight:600',
+            'border:' + (vIdx === 0 ? '2px solid #1a1a1a' : '1px solid #e1e3e5'),
+            'background:' + (vIdx === 0 ? '#1a1a1a' : '#fff'),
+            'color:' + (vIdx === 0 ? '#fff' : '#1a1a1a'),
+          ].join(';');
+          swatchWrap.appendChild(btn);
+        });
+      }
+    }
+
+    group.appendChild(productCard);
+  });
+
+  return group;
+}
+
+
 function renderImageDropdown(element) {
   var group = createGroup(element);
   var config = parseConfig(element.config);
   var choices = getChoices(config);
 
-  var hasExplicitDefault = false;
-  for (var idx = 0; idx < choices.length; idx++) {
-    if (isDefault(choices[idx])) {
-      hasExplicitDefault = true;
-      break;
-    }
-  }
-  if (!hasExplicitDefault && choices.length > 0) {
-    choices[0].default = true;
-  }
+
 
   var layoutWrap = document.createElement('div');
   layoutWrap.className = 'cap-image-dropdown-layout';
@@ -1414,7 +1695,7 @@ function renderImageDropdown(element) {
   defaultOpt.textContent = '-- Select ' + element.label + ' --';
   select.appendChild(defaultOpt);
 
-  choices.forEach(function(opt) {
+  choices.forEach(function (opt) {
     var option = document.createElement('option');
     option.value = opt.value || opt.label;
     option.textContent = getOptionLabel(opt);
@@ -1427,7 +1708,7 @@ function renderImageDropdown(element) {
   optionsList.className = 'cap-image-dropdown-list';
   optionsList.style.display = 'none';
 
-  choices.forEach(function(opt) {
+  choices.forEach(function (opt) {
     var item = document.createElement('div');
     item.className = 'cap-image-dropdown-item';
 
@@ -1444,7 +1725,7 @@ function renderImageDropdown(element) {
     item.setAttribute('data-price', getOptionPriceCents(opt));
     item.appendChild(label);
 
-    item.addEventListener('click', function() {
+    item.addEventListener('click', function () {
       hiddenInput.value = opt.value || opt.label;
       select.value = opt.value || opt.label;
       selectedText.textContent = getOptionLabel(opt);
@@ -1473,11 +1754,11 @@ function renderImageDropdown(element) {
     optionsList.appendChild(item);
   });
 
-  selectedDisplay.addEventListener('click', function() {
+  selectedDisplay.addEventListener('click', function () {
     optionsList.style.display = optionsList.style.display === 'none' ? 'block' : 'none';
   });
 
-  document.addEventListener('click', function(e) {
+  document.addEventListener('click', function (e) {
     if (!group.contains(e.target)) {
       optionsList.style.display = 'none';
     }
@@ -1507,7 +1788,7 @@ function renderRadio(element) {
   var wrap = document.createElement('div');
   wrap.className = 'cap-radio-group';
 
-  choices.forEach(function(opt) {
+  choices.forEach(function (opt) {
     var label = document.createElement('label');
     label.className = 'cap-radio-option';
 
@@ -1522,7 +1803,7 @@ function renderRadio(element) {
       hiddenInput.value = input.value;
     }
 
-    input.addEventListener('change', function() {
+    input.addEventListener('change', function () {
       hiddenInput.value = input.value;
       hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
       hiddenInput.dispatchEvent(new Event('input', { bubbles: true }));
@@ -1552,10 +1833,10 @@ function renderCheckbox(element) {
 
   var wrap = document.createElement('div');
   wrap.className = 'cap-checkbox-group';
-  
+
   var defaultValues = [];
 
-  choices.forEach(function(opt) {
+  choices.forEach(function (opt) {
     var label = document.createElement('label');
     label.className = 'cap-checkbox-option';
 
@@ -1563,15 +1844,15 @@ function renderCheckbox(element) {
     input.type = 'checkbox';
     input.value = opt.value || opt.label;
     input.setAttribute('data-price', getOptionPriceCents(opt));
-    
+
     if (isDefault(opt)) {
       input.checked = true;
       defaultValues.push(input.value);
     }
-    
-    input.addEventListener('change', function() {
+
+    input.addEventListener('change', function () {
       var checkedValues = [];
-      wrap.querySelectorAll('input[type="checkbox"]:checked').forEach(function(cb) {
+      wrap.querySelectorAll('input[type="checkbox"]:checked').forEach(function (cb) {
         checkedValues.push(cb.value);
       });
       hiddenInput.value = checkedValues.join(', ');
@@ -1584,7 +1865,7 @@ function renderCheckbox(element) {
     label.appendChild(document.createTextNode(' ' + getOptionLabel(opt)));
     wrap.appendChild(label);
   });
-  
+
   if (defaultValues.length > 0) {
     hiddenInput.value = defaultValues.join(', ');
   }
@@ -1608,7 +1889,7 @@ function renderButtonSwatch(element) {
   var wrap = document.createElement('div');
   wrap.className = 'cap-swatch-group';
 
-  choices.forEach(function(opt) {
+  choices.forEach(function (opt) {
     var btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'cap-button-swatch';
@@ -1620,8 +1901,8 @@ function renderButtonSwatch(element) {
       hiddenInput.value = opt.value || opt.label;
     }
 
-    btn.addEventListener('click', function() {
-      wrap.querySelectorAll('.cap-button-swatch').forEach(function(b) { b.classList.remove('cap-selected'); });
+    btn.addEventListener('click', function () {
+      wrap.querySelectorAll('.cap-button-swatch').forEach(function (b) { b.classList.remove('cap-selected'); });
       btn.classList.add('cap-selected');
       hiddenInput.value = opt.value || opt.label;
       hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
@@ -1655,7 +1936,7 @@ function renderColorSwatch(element) {
   textDisplay.className = 'cap-help-text';
   textDisplay.style.marginTop = '4px';
 
-  choices.forEach(function(opt) {
+  choices.forEach(function (opt) {
     var swatch = document.createElement('span');
     swatch.className = 'cap-color-swatch';
     swatch.style.backgroundColor = opt.color || opt.value || '#ccc';
@@ -1668,8 +1949,8 @@ function renderColorSwatch(element) {
       textDisplay.textContent = getOptionLabel(opt);
     }
 
-    swatch.addEventListener('click', function() {
-      wrap.querySelectorAll('.cap-color-swatch').forEach(function(s) { s.classList.remove('cap-selected'); });
+    swatch.addEventListener('click', function () {
+      wrap.querySelectorAll('.cap-color-swatch').forEach(function (s) { s.classList.remove('cap-selected'); });
       swatch.classList.add('cap-selected');
       hiddenInput.value = opt.value || opt.label;
       textDisplay.textContent = getOptionLabel(opt);
@@ -1705,7 +1986,7 @@ function renderImageSwatch(element) {
   textDisplay.className = 'cap-help-text';
   textDisplay.style.marginTop = '4px';
 
-  choices.forEach(function(opt) {
+  choices.forEach(function (opt) {
     var swatch = document.createElement('img');
     swatch.className = 'cap-image-swatch';
     swatch.src = opt.image || '';
@@ -1719,8 +2000,8 @@ function renderImageSwatch(element) {
       textDisplay.textContent = getOptionLabel(opt);
     }
 
-    swatch.addEventListener('click', function() {
-      wrap.querySelectorAll('.cap-image-swatch').forEach(function(s) { s.classList.remove('cap-selected'); });
+    swatch.addEventListener('click', function () {
+      wrap.querySelectorAll('.cap-image-swatch').forEach(function (s) { s.classList.remove('cap-selected'); });
       swatch.classList.add('cap-selected');
       hiddenInput.value = opt.value || opt.label;
       textDisplay.textContent = getOptionLabel(opt);
@@ -1830,7 +2111,7 @@ function renderHTML(element) {
 function renderPopupModal(element) {
   var config = parseConfig(element.config);
   var triggerText = config.triggerText || element.label;
-  var modalTitle  = config.title || element.label || 'Details';
+  var modalTitle = config.title || element.label || 'Details';
   var modalContent = config.content || '';
 
   var wrap = document.createElement('div');
@@ -1863,8 +2144,8 @@ function renderPopupModal(element) {
   overlay.style.cssText = [
     'display:none',
     'position:fixed',
-    'top:0','left:0',
-    'width:100%','height:100%',
+    'top:0', 'left:0',
+    'width:100%', 'height:100%',
     'background:rgba(0,0,0,0.55)',
     'z-index:999999',
     'justify-content:center',
@@ -1923,8 +2204,8 @@ function renderPopupModal(element) {
 
   link.addEventListener('click', openModal);
   closeBtn.addEventListener('click', closeModal);
-  overlay.addEventListener('click', function(e) { if (e.target === overlay) closeModal(); });
-  document.addEventListener('keydown', function(e) {
+  overlay.addEventListener('click', function (e) { if (e.target === overlay) closeModal(); });
+  document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape' && overlay.style.display === 'flex') closeModal();
   });
 
@@ -1942,14 +2223,14 @@ function evaluateStorefrontConditions() {
   // 1. Build a map of element values & collect all push rules from other elements
   var valMap = {};
   var allPushRules = [];
-  groups.forEach(function(group) {
+  groups.forEach(function (group) {
     var id = group.getAttribute('data-id');
     if (!id) return;
     valMap[id] = getElementValue(group);
 
     var element = group._element;
     if (element && element.config && element.config.targetOtherFields && element.config.pushRules) {
-      element.config.pushRules.forEach(function(rule) {
+      element.config.pushRules.forEach(function (rule) {
         if (rule.targetElementId) {
           allPushRules.push({
             sourceElementId: id,
@@ -1962,7 +2243,7 @@ function evaluateStorefrontConditions() {
   });
 
   // 2. Evaluate conditions and push rules for each group
-  groups.forEach(function(group) {
+  groups.forEach(function (group) {
     var element = group._element;
     if (!element) return;
 
@@ -2043,13 +2324,13 @@ function evaluateStorefrontConditions() {
     }
 
     // Evaluate push rules targeting this element
-    var pushRulesTargetingMe = allPushRules.filter(function(pr) {
+    var pushRulesTargetingMe = allPushRules.filter(function (pr) {
       return pr.targetElementId === id;
     });
 
     var pushResult = true;
     if (pushRulesTargetingMe.length > 0) {
-      pushResult = pushRulesTargetingMe.some(function(pr) {
+      pushResult = pushRulesTargetingMe.some(function (pr) {
         var sourceVal = valMap[pr.sourceElementId];
         if (sourceVal === undefined) return false;
         if (Array.isArray(sourceVal)) {
@@ -2084,7 +2365,7 @@ function getElementValue(group) {
 
   var element = group._element;
   if (!element) return '';
-  
+
   var choices = (element.config && getChoices(element.config)) || [];
   var match;
   var idx;
@@ -2093,7 +2374,7 @@ function getElementValue(group) {
   var checkboxes = group.querySelectorAll('input[type="checkbox"]');
   if (checkboxes.length > 0) {
     var checkedIds = [];
-    checkboxes.forEach(function(cb) {
+    checkboxes.forEach(function (cb) {
       if (cb.checked) {
         match = null;
         for (idx = 0; idx < choices.length; idx++) {
@@ -2167,7 +2448,7 @@ function getElementValue(group) {
 
 function enableGroupInputs(group, enable) {
   var inputs = group.querySelectorAll('input, select, textarea');
-  inputs.forEach(function(inp) {
+  inputs.forEach(function (inp) {
     inp.disabled = !enable;
   });
 }
@@ -2184,29 +2465,29 @@ function initCartPageFeatures(toggleStates) {
     var cartUrl = (window.Shopify && window.Shopify.routes && window.Shopify.routes.root) ? window.Shopify.routes.root + 'cart.js' : '/cart.js';
 
     fetch(cartUrl)
-      .then(function(res) { return res.json(); })
-      .then(function(cart) {
+      .then(function (res) { return res.json(); })
+      .then(function (cart) {
         if (!cart || !cart.items) {
-           isApplying = false;
-           return;
+          isApplying = false;
+          return;
         }
 
         // Broad selector for cart item rows in most Shopify themes
         var cartRows = document.querySelectorAll('.cart-item, .cart__row, .cart-table-row, tr.cart-item, .mini-cart-item, .drawer__cart-item, li.cart-drawer__item, .cart-drawer__item');
-        
+
         var validRows = [];
-        cartRows.forEach(function(row) {
-           // Ensure it's an actual item row by checking for a remove link or quantity input
-           if (row.querySelector('cart-remove-button, .cart__remove, .cart-item__remove, [href*="/cart/change"], quantity-input, input[name^="updates"]')) {
-             if (validRows.indexOf(row) === -1) {
-               validRows.push(row);
-             }
-           }
+        cartRows.forEach(function (row) {
+          // Ensure it's an actual item row by checking for a remove link or quantity input
+          if (row.querySelector('cart-remove-button, .cart__remove, .cart-item__remove, [href*="/cart/change"], quantity-input, input[name^="updates"]')) {
+            if (validRows.indexOf(row) === -1) {
+              validRows.push(row);
+            }
+          }
         });
 
-        validRows.forEach(function(row) {
+        validRows.forEach(function (row) {
           var item = null;
-          
+
           // 1. Try to find by data-key
           var key = row.getAttribute('data-key') || row.getAttribute('data-cart-item-key');
           if (key) {
@@ -2217,7 +2498,7 @@ function initCartPageFeatures(toggleStates) {
               }
             }
           }
-          
+
           // 2. Try to find by index in ID (e.g., CartDrawer-Item-1)
           if (!item && row.id) {
             var match = row.id.match(/-(\d+)$/);
@@ -2226,10 +2507,10 @@ function initCartPageFeatures(toggleStates) {
               if (cart.items[idx]) item = cart.items[idx];
             }
           }
-          
+
           // 3. Fallback: assume rows are ordered the same as cart.items (handles multiple cart wrappers on the same page)
           if (!item && cart.items.length > 0) {
-            var idx = validRows.indexOf(row) % cart.items.length;
+            idx = validRows.indexOf(row) % cart.items.length;
             item = cart.items[idx];
           }
 
@@ -2242,7 +2523,7 @@ function initCartPageFeatures(toggleStates) {
 
           // In case the theme did output the properties, we hide them explicitly
           var domProps = row.querySelectorAll('.product-details__item, .cart-item__details dl div, .cart-item__property, .item-property, dd, .cart-item__details-property');
-          domProps.forEach(function(prop) {
+          domProps.forEach(function (prop) {
             var text = prop.textContent || '';
             if (text.indexOf('_CustomOptions') > -1 || text.indexOf('_price_adjustments') > -1 || text.indexOf('_is_addon') > -1) {
               prop.style.display = 'none';
@@ -2253,7 +2534,7 @@ function initCartPageFeatures(toggleStates) {
           if (toggleStates.hideQuantity && isAddon) {
             var qty = row.querySelector('.cart-item__quantity-wrapper, quantity-input, .cart__qty, .cart-item__quantity, input[name^="updates"]');
             if (qty) qty.setAttribute('style', 'display: none !important; visibility: hidden !important;');
-            
+
             var removeBtn = row.querySelector('cart-remove-button, .cart__remove, .cart-item__remove');
             if (removeBtn) removeBtn.setAttribute('style', 'display: none !important; visibility: hidden !important;');
           }
@@ -2266,13 +2547,13 @@ function initCartPageFeatures(toggleStates) {
               editBtn.className = 'cap-edit-options-btn link';
               editBtn.style.cssText = 'display:inline-flex; align-items:center; margin-top:8px; font-size:13px; text-decoration:underline; cursor:pointer; color:inherit; opacity:0.8; transition:opacity 0.2s;';
               editBtn.innerHTML = '<svg style="width:14px;height:14px;margin-right:4px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>Edit Options';
-              
-              editBtn.addEventListener('mouseenter', function() { editBtn.style.opacity = '1'; });
-              editBtn.addEventListener('mouseleave', function() { editBtn.style.opacity = '0.8'; });
-              
-              editBtn.addEventListener('click', function(e) {
-                 e.preventDefault();
-                 alert('Edit Options functionality will open the product popup here.');
+
+              editBtn.addEventListener('mouseenter', function () { editBtn.style.opacity = '1'; });
+              editBtn.addEventListener('mouseleave', function () { editBtn.style.opacity = '0.8'; });
+
+              editBtn.addEventListener('click', function (e) {
+                e.preventDefault();
+                alert('Edit Options functionality will open the product popup here.');
               });
 
               var detailsWrap = row.querySelector('.cart-item__details, .cart__item-details, .product-details, dl') || row.querySelector('td:nth-child(2)');
@@ -2289,7 +2570,7 @@ function initCartPageFeatures(toggleStates) {
         });
         isApplying = false;
       })
-      .catch(function(e) {
+      .catch(function (e) {
         console.warn('Pistalix: Cart fetch failed', e);
         isApplying = false;
       });
@@ -2304,7 +2585,7 @@ function initCartPageFeatures(toggleStates) {
   applyCartModificationsDebounced();
 
   // Re-run on DOM mutations (for ajax carts/drawers)
-  var observer = new MutationObserver(function(mutations) {
+  var observer = new MutationObserver(function (mutations) {
     var shouldApply = false;
     for (var i = 0; i < mutations.length; i++) {
       for (var j = 0; j < mutations[i].addedNodes.length; j++) {
@@ -2316,7 +2597,7 @@ function initCartPageFeatures(toggleStates) {
     }
     if (shouldApply) applyCartModificationsDebounced();
   });
-  
+
   if (document.body) {
     observer.observe(document.body, { childList: true, subtree: true });
   }

@@ -50,6 +50,7 @@ export const elementCategories = [
       { label: "Pop-up Modal", type: "popup_modal", icon: "↗" },
       { label: "Size chart", type: "size_chart", icon: "📏" },
       { label: "Tabs", type: "tabs", icon: "⊞" },
+      { label: "Bundle", type: "bundle", icon: "📦" },
     ],
   },
 ];
@@ -90,6 +91,7 @@ export function getElementDescription(type) {
     "popup_modal": "Pop-up modal content.",
     "size_chart": "Size chart table.",
     "tabs": "Tabbed content sections.",
+    "bundle": "Select multiple products to bundle.",
   };
   return descriptions[type] || "Custom field.";
 }
@@ -164,6 +166,8 @@ export function getDefaultConfig(type) {
       return { triggerText: "Size Chart", content: "<table><tr><th>Size</th><th>Chest</th></tr><tr><td>S</td><td>36</td></tr></table>" };
     case "range_slider":
       return { min: 0, max: 100, step: 1 };
+    case "bundle":
+      return { bundleProducts: [] };
     default:
       return {};
   }

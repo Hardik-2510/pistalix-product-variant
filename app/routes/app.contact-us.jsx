@@ -44,7 +44,7 @@ export default function ContactUs() {
                       <Text as="p" tone="subdued" alignment="center">
                         Chat with our support team in real-time.
                       </Text>
-                      <Button onClick={() => window.open('https://pistalix.com', '_blank')}>Start chat</Button>
+                      <Button onClick={() => window.open('https://pistalix.in', '_blank')}>Start chat</Button>
                     </BlockStack>
                   </Card>
 
@@ -57,7 +57,9 @@ export default function ContactUs() {
                       <Text as="p" tone="subdued" alignment="center">
                         Send us an email and we&apos;ll get back to you within 24 hours.
                       </Text>
-                      <Button onClick={() => window.open('mailto:support@pistalix.com', '_blank')}>Send email</Button>
+                      <Text as="p" tone="subdued" alignment="center">
+                      info@pistalix.in
+                      </Text>
                     </BlockStack>
                   </Card>
 
@@ -70,12 +72,25 @@ export default function ContactUs() {
                       <Text as="p" tone="subdued" alignment="center">
                         Read our detailed guides and tutorials.
                       </Text>
-                      <Button onClick={() => window.open('https://help.pistalix.com', '_blank')}>View docs</Button>
+                      <Button onClick={() => window.open('https://pistalix.in', '_blank')}>View docs</Button>
                     </BlockStack>
                   </Card>
                 </InlineGrid>
               </Box>
             </BlockStack>
+          </Layout.Section>
+
+          <Layout.Section>
+            <Box paddingBlockStart="800" paddingBlockEnd="400">
+              <BlockStack gap="200" inlineAlign="center">
+                <Text as="p" tone="subdued" alignment="center">
+                  © Pistalix Solutions Private Limited | All Right Reserved
+                </Text>
+                <Text as="p" tone="subdued" alignment="center">
+                  Address: Unique Square, Opp. Zudio, Singanpor, Katargam, Surat, – 395004
+                </Text>
+              </BlockStack>
+            </Box>
           </Layout.Section>
         </Layout>
       </BlockStack>

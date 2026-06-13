@@ -380,6 +380,82 @@ export default function ElementConfigForm({ element, updateField, updateConfig }
           <Select label="Layout" options={["list", "grid"]} value={config.layout || "list"} onChange={(v) => updateConfig("layout", v)} />
         </BlockStack>
       )}
+
+      {(typeStr === "bundle" || element.type === "Bundle") && (
+        <BlockStack gap="400">
+          <Text variant="headingXs" as="h6" fontWeight="bold">Bundle Products</Text>
+          <Text as="p" tone="subdued" variant="bodySm">
+            Select products from your store. Customers will be able to choose variants for each bundled product.
+          </Text>
+          <Button
+            onClick={async () => {
+              const currentIds = (config.bundleProducts || []).map((p) => ({ id: p.id }));
+              const selected = await window.shopify.resourcePicker({
+                type: "product",
+                multiple: true,
+                action: "select",
+                selectionIds: currentIds,
+              });
+              if (selected) {
+                const mapped = selected.map((p) => ({
+                  id: p.id,
+                  title: p.title,
+                  handle: p.handle,
+                  image: p.images?.[0]?.originalSrc || p.images?.[0]?.url || "",
+                  variants: (p.variants || []).map((v) => ({
+                    id: v.id,
+                    title: v.title,
+                    price: v.price,
+                  })),
+                }));
+                updateConfig("bundleProducts", mapped);
+              }
+            }}
+          >
+            {(config.bundleProducts || []).length > 0 ? "Edit products" : "Select products"}
+          </Button>
+
+          {(config.bundleProducts || []).length > 0 && (
+            <BlockStack gap="200">
+              {(config.bundleProducts || []).map((product, idx) => (
+                <Box key={product.id || idx} padding="300" borderWidth="025" borderColor="border" borderRadius="200" background="bg-surface-secondary">
+                  <InlineStack align="space-between" blockAlign="center">
+                    <InlineStack gap="300" blockAlign="center">
+                      {product.image ? (
+                        <img
+                          src={product.image}
+                          alt={product.title}
+                          style={{ width: "40px", height: "40px", objectFit: "cover", borderRadius: "6px", border: "1px solid var(--p-color-border)" }}
+                        />
+                      ) : (
+                        <div style={{ width: "40px", height: "40px", borderRadius: "6px", background: "var(--p-color-bg-surface-tertiary)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px" }}>📦</div>
+                      )}
+                      <BlockStack gap="0">
+                        <Text variant="bodyMd" fontWeight="bold" as="p">{product.title}</Text>
+                        <Text variant="bodySm" tone="subdued" as="p">
+                          {(product.variants || []).length} variant{(product.variants || []).length !== 1 ? "s" : ""}
+                        </Text>
+                      </BlockStack>
+                    </InlineStack>
+                    <Button
+                      variant="tertiary"
+                      tone="critical"
+                      size="slim"
+                      onClick={() => {
+                        const updated = [...(config.bundleProducts || [])];
+                        updated.splice(idx, 1);
+                        updateConfig("bundleProducts", updated);
+                      }}
+                    >
+                      Remove
+                    </Button>
+                  </InlineStack>
+                </Box>
+              ))}
+            </BlockStack>
+          )}
+        </BlockStack>
+      )}
     </BlockStack>
   );
 }

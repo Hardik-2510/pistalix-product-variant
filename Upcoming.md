@@ -1,6 +1,6 @@
 # Add Theme App Extension for App Embed and App Block
 
-This plan outlines the steps to create a Shopify Theme App Extension for PistaLix Globo. This will allow merchants to embed your app into their storefronts and add custom product options via an App Block on their product pages.
+This plan outlines the steps to create a Shopify Theme App Extension for Pistalix Product Variant. This will allow merchants to embed your app into their storefronts and add custom product options via an App Block on their product pages.
 
 Specifically, it will implement the functionality to directly display the templates/option sets built in the admin app onto the theme storefront, leveraging the data stored in Shopify metafields.
 
@@ -25,7 +25,7 @@ We will use the Shopify CLI to generate a theme app extension in the `extensions
 Configuration file for the theme app extension.
 
 #### [NEW] `extensions/theme-extension/blocks/app-embed.liquid`
-The App Embed block that will be toggled on in the theme settings (e.g., "PistaLix Globo Core"). It will include global styles and scripts to handle dynamic price updates and cart logic.
+The App Embed block that will be toggled on in the theme settings (e.g., "Pistalix Product Variant Core"). It will include global styles and scripts to handle dynamic price updates and cart logic.
 
 #### [NEW] `extensions/theme-extension/blocks/product-options.liquid`
 The App Block that merchants will drag-and-drop onto their Product Pages to display the custom fields. This file will:
