@@ -181,6 +181,44 @@ export default function ElementRenderer({ element, value, onChange }) {
       );
     }
 
+    case "file_upload":
+    case "file upload": {
+      const renderLabel = () => {
+        const textLabel = `${label}${getAddOnText(config)}`;
+        if (config.helpText && config.helpTextPosition === "Tooltip") {
+          return (
+            <InlineStack gap="100" blockAlign="center">
+              <Text as="span">{textLabel}</Text>
+              <Tooltip content={config.helpText}>
+                <Text as="span" tone="subdued" cursor="help">ⓘ</Text>
+              </Tooltip>
+            </InlineStack>
+          );
+        }
+        return textLabel;
+      };
+
+      return (
+        <Box>
+          <Text as="p" variant="bodySm" fontWeight="semibold" paddingBlockEnd="100">{renderLabel()}</Text>
+          <div style={{
+            border: "1px dashed var(--p-color-border)",
+            borderRadius: "4px",
+            padding: "16px",
+            textAlign: "center",
+            backgroundColor: "var(--p-color-bg-surface-secondary)"
+          }}>
+            <Button>{config.buttonText || "Upload File"}</Button>
+            <Box paddingBlockStart="100">
+              <Text tone="subdued" variant="bodySm">
+                {config.helpText || `Max size: ${config.maxSizeMB || 10}MB`}
+              </Text>
+            </Box>
+          </div>
+        </Box>
+      );
+    }
+
     case "textarea": {
       const currentLength = (value || "").length;
       const maxL = config.maxCharacter;

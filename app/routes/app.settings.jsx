@@ -297,11 +297,25 @@ export default function Settings() {
   const [addonMoneyFormat, setAddonMoneyFormat] = useState(settings.addonMoneyFormat || "Without currency");
   const [addonLabelFormat, setAddonLabelFormat] = useState(settings.addonLabelFormat || "(+ {{addon}})");
 
+  const [customFonts, setCustomFonts] = useState(settings.customFonts || []);
+  const [fontName, setFontName] = useState("");
+  const [fontFile, setFontFile] = useState(null);
+  const [fontFileName, setFontFileName] = useState("");
+  const fontFileInputRef = useRef(null);
+
+  const fontOptions = [
+    { label: "Open Sans", value: "Open Sans" },
+    { label: "Inter", value: "Inter" },
+    { label: "Roboto", value: "Roboto" },
+    { label: "Helvetica", value: "Helvetica" },
+    ...customFonts.map(f => ({ label: f.name, value: f.name }))
+  ];
+
   const fileInputRef = useRef(null);
 
   const handleExport = () => {
     const payload = {
-      alignment, position, customSelector, filePreview, colors, borders, typography, toggleStates, addonMoneyFormat, addonLabelFormat
+      alignment, position, customSelector, filePreview, colors, borders, typography, toggleStates, addonMoneyFormat, addonLabelFormat, customFonts
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -331,6 +345,7 @@ export default function Settings() {
         if (imported.toggleStates) setToggleStates(imported.toggleStates);
         if (imported.addonMoneyFormat) setAddonMoneyFormat(imported.addonMoneyFormat);
         if (imported.addonLabelFormat) setAddonLabelFormat(imported.addonLabelFormat);
+        if (imported.customFonts) setCustomFonts(imported.customFonts);
         alert("Settings imported successfully. Click Save to apply changes.");
       } catch(err) {
         alert("Invalid JSON file");
@@ -342,7 +357,7 @@ export default function Settings() {
 
   const handleSave = () => {
     const payload = {
-      alignment, position, customSelector, filePreview, colors, borders, typography, toggleStates, addonMoneyFormat, addonLabelFormat
+      alignment, position, customSelector, filePreview, colors, borders, typography, toggleStates, addonMoneyFormat, addonLabelFormat, customFonts
     };
     submit({ payload: JSON.stringify(payload), shopId: shopId }, { method: "post" });
   };
@@ -446,25 +461,6 @@ export default function Settings() {
                               <CustomToggle checked={toggleStates.displayValue} onChange={() => handleToggle("displayValue")} />
                             </InlineStack>
                           </Box>
-                          <Box paddingBlockStart="100" paddingBlockEnd="200">
-                            <InlineStack align="space-between" blockAlign="center">
-                              <Text as="p" variant="bodyMd">Limit widget height (scroll if too long)</Text>
-                              <CustomToggle checked={toggleStates.limitHeight} onChange={() => handleToggle("limitHeight")} />
-                            </InlineStack>
-                          </Box>
-                        </BlockStack>
-                      </Box>
-                      <Box padding="400" background="bg-surface-secondary" borderBlockEndWidth="025" borderColor="border">
-                        <Text variant="headingSm" as="h3" fontWeight="semibold">Collection page</Text>
-                      </Box>
-                      <Box padding="400" borderBlockEndWidth="025" borderColor="border">
-                        <BlockStack gap="200">
-                          <Box paddingBlockStart="100" paddingBlockEnd="200">
-                            <InlineStack align="space-between" blockAlign="center">
-                              <Text as="p" variant="bodyMd">Show options on Quickview popups</Text>
-                              <CustomToggle checked={toggleStates.collectionQuickview} onChange={() => handleToggle("collectionQuickview")} />
-                            </InlineStack>
-                          </Box>
                         </BlockStack>
                       </Box>
                       <Box padding="400" background="bg-surface-secondary" borderBlockEndWidth="025" borderColor="border">
@@ -472,12 +468,7 @@ export default function Settings() {
                       </Box>
                       <Box padding="400" borderBlockEndWidth="025" borderColor="border">
                         <BlockStack gap="200">
-                          <Box paddingBlockStart="100" paddingBlockEnd="200">
-                            <InlineStack align="space-between" blockAlign="center">
-                              <Text as="p" variant="bodyMd">Go to cart immediately after adding to cart</Text>
-                              <CustomToggle checked={toggleStates.goToCart} onChange={() => handleToggle("goToCart")} />
-                            </InlineStack>
-                          </Box>
+                          {/* goToCart option removed as requested */}
                           <Box paddingBlockStart="100" paddingBlockEnd="200">
                             <InlineStack align="space-between" blockAlign="center">
                               <Text as="p" variant="bodyMd">Auto-scroll to first error message</Text>
@@ -500,71 +491,73 @@ export default function Settings() {
                           </Box>
                         </BlockStack>
                       </Box>
-                      <Box padding="400" background="bg-surface-secondary" borderBlockEndWidth="025" borderColor="border">
-                        <Text variant="headingSm" as="h3" fontWeight="semibold">Cart page</Text>
-                      </Box>
-                      <Box padding="400" borderBlockEndWidth="025" borderColor="border">
-                        <BlockStack gap="200">
-                          <Box paddingBlockStart="100" paddingBlockEnd="200">
-                            <InlineStack align="space-between" blockAlign="center">
-                              <Text as="p" variant="bodyMd">Hide quantity box and remove button for add-on products</Text>
-                              <CustomToggle checked={toggleStates.hideQuantity} onChange={() => handleToggle("hideQuantity")} />
-                            </InlineStack>
-                          </Box>
-                          <Box paddingBlockStart="100" paddingBlockEnd="200">
-                            <InlineStack align="space-between" blockAlign="center">
-                              <Text as="p" variant="bodyMd">Show Edit Options button in cart</Text>
-                              <CustomToggle checked={toggleStates.showEditOptions} onChange={() => handleToggle("showEditOptions")} />
-                            </InlineStack>
-                          </Box>
-                          <Divider />
-                          <Box paddingBlockStart="100" paddingBlockEnd="200">
-                            <InlineStack align="space-between" blockAlign="center">
-                              <Text as="p" tone="subdued" variant="bodyMd">Personalize preview mode</Text>
-                              <ButtonGroup>
-                                <Button disabled>👁️</Button>
-                                <Button disabled>⬇️</Button>
-                              </ButtonGroup>
-                            </InlineStack>
-                          </Box>
-                        </BlockStack>
-                      </Box>
-                      <Box padding="400" background="bg-surface-secondary" borderBlockEndWidth="025" borderColor="border">
-                        <Text variant="headingSm" as="h3" fontWeight="semibold">Other pages</Text>
-                      </Box>
-                      <Box padding="400" borderBlockEndWidth="025" borderColor="border">
-                        <BlockStack gap="200">
-                          <Box paddingBlockStart="100" paddingBlockEnd="200">
-                            <InlineStack align="space-between" blockAlign="center">
-                              <Text as="p" variant="bodyMd">Show widget on home page (featured product section only)</Text>
-                              <CustomToggle checked={toggleStates.homePageWidget} onChange={() => handleToggle("homePageWidget")} />
-                            </InlineStack>
-                          </Box>
-                          <Box paddingBlockStart="100" paddingBlockEnd="200">
-                            <InlineStack align="space-between" blockAlign="center">
-                              <Text as="p" variant="bodyMd">Show widget on regular page (featured product section only)</Text>
-                              <CustomToggle checked={toggleStates.regularPageWidget} onChange={() => handleToggle("regularPageWidget")} />
-                            </InlineStack>
-                          </Box>
-                        </BlockStack>
-                      </Box>
                       <Box padding="400">
                         <Text variant="headingMd" as="h3">Custom fonts</Text>
                         <BlockStack gap="300">
+                          {customFonts.length > 0 && (
+                            <Box paddingBlockEnd="200">
+                              <BlockStack gap="200">
+                                {customFonts.map((f, i) => (
+                                  <InlineStack align="space-between" blockAlign="center" key={i}>
+                                    <Text as="span" fontWeight="semibold">{f.name}</Text>
+                                    <Button size="slim" tone="critical" onClick={() => setCustomFonts(prev => prev.filter((_, idx) => idx !== i))}>Remove</Button>
+                                  </InlineStack>
+                                ))}
+                              </BlockStack>
+                            </Box>
+                          )}
                           <Box>
                             <Text as="p" fontWeight="bold">Font name <Text as="span" tone="critical">*</Text></Text>
-                            <TextField placeholder="" autoComplete="off" />
+                            <TextField value={fontName} onChange={setFontName} placeholder="e.g. My Custom Font" autoComplete="off" />
                           </Box>
                           <Box>
                             <Text as="p" fontWeight="bold">Font file <Text as="span" tone="critical">*</Text></Text>
-                            <Box padding="400" borderStyle="dashed" borderWidth="025" borderColor="border-strong" borderRadius="100">
-                              <BlockStack inlineAlign="center" gap="200">
-                                <Button>Add file</Button>
-                                <Text as="p" tone="subdued">Accepts .woff2, .woff, .ttf and .otf</Text>
-                              </BlockStack>
-                            </Box>
+                            <input 
+                              type="file" 
+                              accept=".woff2,.woff,.ttf,.otf" 
+                              ref={fontFileInputRef} 
+                              style={{ display: 'none' }} 
+                              onChange={(e) => {
+                                const file = e.target.files[0];
+                                if (file) {
+                                  setFontFileName(file.name);
+                                  const reader = new FileReader();
+                                  reader.onload = (evt) => setFontFile(evt.target.result);
+                                  reader.readAsDataURL(file);
+                                }
+                              }} 
+                            />
+                            <div 
+                              onClick={() => fontFileInputRef.current?.click()}
+                              style={{ cursor: 'pointer' }}
+                              role="button"
+                              tabIndex={0}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                  e.preventDefault();
+                                  fontFileInputRef.current?.click();
+                                }
+                              }}
+                            >
+                              <Box padding="400" borderStyle="dashed" borderWidth="025" borderColor="border-strong" borderRadius="100">
+                                <BlockStack inlineAlign="center" gap="200">
+                                  <Button onClick={() => fontFileInputRef.current?.click()}>Add file</Button>
+                                  <Text as="p" tone="subdued">{fontFileName || "Accepts .woff2, .woff, .ttf and .otf"}</Text>
+                                </BlockStack>
+                              </Box>
+                            </div>
                           </Box>
-                          <Button>Upload font</Button>
+                          <Button 
+                            disabled={!fontName || !fontFile} 
+                            onClick={() => {
+                              setCustomFonts(prev => [...prev, { name: fontName, url: fontFile, filename: fontFileName }]);
+                              setFontName("");
+                              setFontFile(null);
+                              setFontFileName("");
+                            }}
+                          >
+                            Upload font
+                          </Button>
                         </BlockStack>
                       </Box>
                     </BlockStack>
@@ -731,7 +724,7 @@ export default function Settings() {
                               <Checkbox label="Use custom font" checked={typography.labelCustom} onChange={(val) => handleTypographyChange('labelCustom', val)} />
                               <Box>
                                 <Text as="p" paddingBlockEnd="100">Font</Text>
-                                <Select options={["Open Sans", "Inter", "Roboto", "Helvetica"]} value={typography.labelFont} onChange={(val) => handleTypographyChange('labelFont', val)} disabled={!typography.labelCustom} />
+                                <Select options={fontOptions} value={typography.labelFont} onChange={(val) => handleTypographyChange('labelFont', val)} disabled={!typography.labelCustom} />
                               </Box>
                               <Box>
                                 <InlineStack align="space-between"><Text as="p">Base size</Text><Text tone="subdued" as="span">{typography.labelSize}px</Text></InlineStack>
@@ -745,7 +738,7 @@ export default function Settings() {
                               <Checkbox label="Use custom font" checked={typography.mainCustom} onChange={(val) => handleTypographyChange('mainCustom', val)} />
                               <Box>
                                 <Text as="p" paddingBlockEnd="100">Font</Text>
-                                <Select options={["Open Sans", "Inter", "Roboto", "Helvetica"]} value={typography.mainFont} onChange={(val) => handleTypographyChange('mainFont', val)} disabled={!typography.mainCustom} />
+                                <Select options={fontOptions} value={typography.mainFont} onChange={(val) => handleTypographyChange('mainFont', val)} disabled={!typography.mainCustom} />
                               </Box>
                               <Box>
                                 <InlineStack align="space-between"><Text as="p">Base size</Text><Text tone="subdued" as="span">{typography.mainSize}px</Text></InlineStack>
@@ -759,7 +752,7 @@ export default function Settings() {
                               <Checkbox label="Use custom font" checked={typography.helpCustom} onChange={(val) => handleTypographyChange('helpCustom', val)} />
                               <Box>
                                 <Text as="p" paddingBlockEnd="100">Font</Text>
-                                <Select options={["Open Sans", "Inter", "Roboto", "Helvetica"]} value={typography.helpFont} onChange={(val) => handleTypographyChange('helpFont', val)} disabled={!typography.helpCustom} />
+                                <Select options={fontOptions} value={typography.helpFont} onChange={(val) => handleTypographyChange('helpFont', val)} disabled={!typography.helpCustom} />
                               </Box>
                               <Box>
                                 <InlineStack align="space-between"><Text as="p">Base size</Text><Text tone="subdued" as="span">{typography.helpSize}px</Text></InlineStack>
@@ -773,7 +766,7 @@ export default function Settings() {
                               <Checkbox label="Use custom font" checked={typography.addonCustom} onChange={(val) => handleTypographyChange('addonCustom', val)} />
                               <Box>
                                 <Text as="p" paddingBlockEnd="100">Font</Text>
-                                <Select options={["Open Sans", "Inter", "Roboto", "Helvetica"]} value={typography.addonFont} onChange={(val) => handleTypographyChange('addonFont', val)} disabled={!typography.addonCustom} />
+                                <Select options={fontOptions} value={typography.addonFont} onChange={(val) => handleTypographyChange('addonFont', val)} disabled={!typography.addonCustom} />
                               </Box>
                               <Box>
                                 <InlineStack align="space-between"><Text as="p">Base size</Text><Text tone="subdued" as="span">{typography.addonSize}px</Text></InlineStack>

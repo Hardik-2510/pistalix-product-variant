@@ -445,12 +445,39 @@ export default function ElementEditor({ element, allElements = [], onChange, onB
                         <TextField
                           label="Maximum file size (MB)"
                           type="number"
-                          value={element.config?.maxFileSize || ""}
-                          onChange={(val) => handleConfigChange("maxFileSize", val)}
+                          value={element.config?.maxSizeMB || ""}
+                          onChange={(val) => handleConfigChange("maxSizeMB", val)}
                           autoComplete="off"
                         />
                       </Box>
                     </InlineStack>
+                    <InlineStack gap="400">
+                      <Box width="100%">
+                        <TextField
+                          label="Maximum Number of Files"
+                          type="number"
+                          value={element.config?.maxFiles || "1"}
+                          onChange={(val) => handleConfigChange("maxFiles", val)}
+                          autoComplete="off"
+                        />
+                      </Box>
+                      <Box width="100%">
+                        <TextField
+                          label="Button Text"
+                          value={element.config?.buttonText || "Upload File"}
+                          onChange={(val) => handleConfigChange("buttonText", val)}
+                          autoComplete="off"
+                        />
+                      </Box>
+                    </InlineStack>
+                    <Box width="100%">
+                      <TextField
+                        label="Success Message"
+                        value={element.config?.successMessage || "File attached successfully!"}
+                        onChange={(val) => handleConfigChange("successMessage", val)}
+                        autoComplete="off"
+                      />
+                    </Box>
                   </BlockStack>
                 </Box>
               )}

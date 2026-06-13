@@ -238,13 +238,15 @@ export default function ElementConfigForm({ element, updateField, updateConfig }
 
       {(typeStr === "file_upload" || element.type === "File Upload") && (
         <BlockStack gap="300">
-          <Checkbox label="Required" checked={element.required || false} onChange={(v) => updateField("required", v)} />
+          <Checkbox label="Is Upload Required?" checked={element.required || false} onChange={(v) => updateField("required", v)} />
           <InlineStack gap="200">
-            <Box width="50%"><TextField label="Max files (1-20)" type="number" value={config.maxFiles?.toString() || "1"} onChange={(v) => updateConfig("maxFiles", parseInt(v) || 1)} /></Box>
-            <Box width="50%"><TextField label="Max size (MB)" type="number" value={config.maxSizeMB?.toString() || "10"} onChange={(v) => updateConfig("maxSizeMB", parseInt(v) || 10)} /></Box>
+            <Box width="50%"><TextField label="Maximum Number of Files" type="number" value={config.maxFiles?.toString() || "1"} onChange={(v) => updateConfig("maxFiles", parseInt(v) || 1)} /></Box>
+            <Box width="50%"><TextField label="Maximum File Size (MB)" type="number" value={config.maxSizeMB?.toString() || "10"} onChange={(v) => updateConfig("maxSizeMB", parseInt(v) || 10)} /></Box>
           </InlineStack>
-          <TextField label="Accepted file types (comma separated)" value={(config.acceptedTypes || []).join(", ")} onChange={(v) => updateConfig("acceptedTypes", v.split(",").map(s => s.trim()))} placeholder="image/*, .pdf, .ai" />
-          <Checkbox label="Show preview toggle" checked={config.showPreview || false} onChange={(v) => updateConfig("showPreview", v)} />
+          <TextField label="Allowed File Types (comma separated extensions, e.g., .png, .jpg, .pdf, .ai)" value={(config.allowedExtensions || "")} onChange={(v) => updateConfig("allowedExtensions", v)} placeholder=".png, .jpg, .pdf, .ai" />
+          <TextField label="Button Text" value={config.buttonText || "Upload File"} onChange={(v) => updateConfig("buttonText", v)} />
+          <TextField label="Help/Instruction Text" value={config.helpText || ""} onChange={(v) => updateConfig("helpText", v)} />
+          <TextField label="Success Message" value={config.successMessage || "File attached successfully!"} onChange={(v) => updateConfig("successMessage", v)} />
         </BlockStack>
       )}
 

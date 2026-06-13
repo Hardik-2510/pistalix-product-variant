@@ -1,3 +1,4 @@
+/* eslint-disable no-redeclare */
 /**
  * Pistalix Product Variant — Product Options Widget
  * 
@@ -10,6 +11,26 @@ var capConfig = {
   basePrice: 0,
   moneyFormat: '${{amount}}'
 };
+
+function getToggleStates() {
+  var states = capConfig.settings && capConfig.settings.toggleStates ? capConfig.settings.toggleStates : {};
+  return {
+    tooltip: states.tooltip !== undefined ? states.tooltip : true,
+    displayValue: states.displayValue !== undefined ? states.displayValue : true,
+    limitHeight: states.limitHeight !== undefined ? states.limitHeight : false,
+    collectionQuickview: states.collectionQuickview !== undefined ? states.collectionQuickview : true,
+    autoScroll: states.autoScroll !== undefined ? states.autoScroll : true,
+    hideQuantity: states.hideQuantity !== undefined ? states.hideQuantity : true,
+    showEditOptions: states.showEditOptions !== undefined ? states.showEditOptions : false,
+    homePageWidget: states.homePageWidget !== undefined ? states.homePageWidget : true,
+    regularPageWidget: states.regularPageWidget !== undefined ? states.regularPageWidget : true,
+    showAddonForInputs: states.showAddonForInputs !== undefined ? states.showAddonForInputs : true,
+    showAddonForOptions: states.showAddonForOptions !== undefined ? states.showAddonForOptions : true,
+    showAddonMessage: states.showAddonMessage !== undefined ? states.showAddonMessage : true,
+    addAddonPriceToProductPrice: states.addAddonPriceToProductPrice !== undefined ? states.addAddonPriceToProductPrice : true,
+    mergeMainProductAndAddonProducts: states.mergeMainProductAndAddonProducts !== undefined ? states.mergeMainProductAndAddonProducts : false
+  };
+}
 
 function initPistalixWidget() {
   var container = document.getElementById('cap-product-options');
@@ -28,29 +49,25 @@ function initPistalixWidget() {
     } catch (e) { console.warn("Pistalix: JSON parse failed", e); }
   }
 
-  var toggleStates = capConfig.settings ? capConfig.settings.toggleStates : {};
+  var toggleStates = getToggleStates();
 
   // Initialize cart page features globally (handles ajax carts/drawers as well)
-  if (toggleStates) {
-    initCartPageFeatures(toggleStates);
-  }
+  initCartPageFeatures(toggleStates);
 
   var pageType = container.getAttribute('data-page-type');
 
-  if (toggleStates) {
-    if (pageType === 'index' && toggleStates.homePageWidget === false) {
-      container.style.display = 'none';
-      return;
-    }
-    if (pageType === 'collection' && toggleStates.collectionQuickview === false) {
-      container.style.display = 'none';
-      return;
-    }
-    // "Regular page" covers anything else not specifically product/index/collection
-    if (pageType !== 'product' && pageType !== 'index' && pageType !== 'collection' && toggleStates.regularPageWidget === false) {
-      container.style.display = 'none';
-      return;
-    }
+  if (pageType === 'index' && toggleStates.homePageWidget === false) {
+    container.style.display = 'none';
+    return;
+  }
+  if (pageType === 'collection' && toggleStates.collectionQuickview === false) {
+    container.style.display = 'none';
+    return;
+  }
+  // "Regular page" covers anything else not specifically product/index/collection
+  if (pageType !== 'product' && pageType !== 'index' && pageType !== 'collection' && toggleStates.regularPageWidget === false) {
+    container.style.display = 'none';
+    return;
   }
 
   var source = container.getAttribute('data-source');
@@ -410,6 +427,36 @@ function initPriceTracking(container) {
   capConfig.currency = container.getAttribute('data-currency') || 'USD';
 }
 
+function updateDisplayValue(group) {
+  var displaySpan = group.querySelector('.cap-selected-value-display');
+  if (!displaySpan) return;
+
+  var type = group.getAttribute('data-type');
+  var val = '';
+
+  if (['Text', 'Textarea', 'Number', 'Email', 'Phone', 'Datetime'].indexOf(type) !== -1) {
+    var input = group.querySelector('input, textarea');
+    if (input) val = input.value;
+  } else if (['Dropdown', 'Select'].indexOf(type) !== -1) {
+    var select = group.querySelector('select');
+    if (select && select.selectedIndex >= 0 && select.value !== '') {
+      val = select.value;
+    }
+  } else if (['Color Dropdown', 'Image Dropdown', 'Radio Button', 'Color Swatch', 'Image Swatch', 'Button', 'Switch'].indexOf(type) !== -1) {
+    var hidden = group.querySelector('input[type="hidden"]');
+    if (hidden) val = hidden.value;
+  } else if (type === 'Checkbox') {
+    var checked = Array.from(group.querySelectorAll('input[type="checkbox"]:checked')).map(function (cb) { return cb.value; });
+    val = checked.join(', ');
+  }
+
+  if (val) {
+    displaySpan.textContent = ' ' + val;
+  } else {
+    displaySpan.textContent = '';
+  }
+}
+
 function createGroup(element) {
   var group = document.createElement('div');
   group.className = 'cap-option-group';
@@ -419,10 +466,26 @@ function createGroup(element) {
   group._element = element;
 
   var labelWrap = document.createElement('div');
-  // Use div instead of label to avoid theme CSS overriding label styles
   var labelEl = document.createElement('div');
   labelEl.className = 'cap-label';
-  labelEl.textContent = element.label;
+  labelEl.style.display = 'inline-flex';
+  labelEl.style.flexWrap = 'wrap';
+  labelEl.style.alignItems = 'center';
+
+  var labelTextSpan = document.createElement('span');
+  labelTextSpan.textContent = element.label;
+  labelEl.appendChild(labelTextSpan);
+
+  var toggleStates = getToggleStates();
+  if (toggleStates.displayValue !== false) {
+    var displayValueSpan = document.createElement('span');
+    displayValueSpan.className = 'cap-selected-value-display';
+    displayValueSpan.style.fontWeight = 'normal';
+    displayValueSpan.style.color = 'var(--p-color-text-subdued, #666)';
+    displayValueSpan.style.marginLeft = '4px';
+    labelEl.appendChild(displayValueSpan);
+  }
+
   labelWrap.appendChild(labelEl);
 
   if (element.required) {
@@ -442,6 +505,13 @@ function createGroup(element) {
     help.textContent = helpText;
     group.appendChild(help);
   }
+
+  group.addEventListener('change', function () { updateDisplayValue(group); });
+  group.addEventListener('input', function () { updateDisplayValue(group); });
+
+  // Initial update after a short delay to allow children to mount and initialize
+  setTimeout(function () { updateDisplayValue(group); }, 50);
+
   return group;
 }
 
@@ -484,6 +554,7 @@ function renderTemplate(template, container) {
     else if (typeLower === 'button') elDOM = renderButtonSwatch(element);
     else if (typeLower === 'color swatch' || typeLower === 'color_swatch') elDOM = renderColorSwatch(element);
     else if (typeLower === 'image swatch' || typeLower === 'image_swatch') elDOM = renderImageSwatch(element);
+    else if (typeLower === 'file' || typeLower === 'file upload' || typeLower === 'file_upload') elDOM = renderFile(element);
     else if (typeLower === 'heading') elDOM = renderHeading(element);
     else if (typeLower === 'divider') elDOM = renderDivider(element);
     else if (typeLower === 'paragraph') elDOM = renderParagraph(element);
@@ -547,24 +618,41 @@ function applyDynamicStyles(wrapper) {
   var style = document.createElement('style');
   var css = '';
 
+  // Inject Custom Fonts
+  var customFonts = appSettings.customFonts || [];
+  for (var i = 0; i < customFonts.length; i++) {
+    var font = customFonts[i];
+    if (font.name && font.url) {
+      // Determine format from filename
+      var formatStr = '';
+      var fname = (font.filename || '').toLowerCase();
+      if (fname.indexOf('.woff2') > -1) formatStr = ' format("woff2")';
+      else if (fname.indexOf('.woff') > -1) formatStr = ' format("woff")';
+      else if (fname.indexOf('.ttf') > -1) formatStr = ' format("truetype")';
+      else if (fname.indexOf('.otf') > -1) formatStr = ' format("opentype")';
+      
+      css += '@font-face {\n  font-family: "' + font.name + '";\n  src: url("' + font.url + '")' + formatStr + ';\n  font-weight: normal;\n  font-style: normal;\n  font-display: swap;\n}\n';
+    }
+  }
+
   // General
   css += '.cap-options-wrapper { display: flex !important; flex-wrap: wrap !important; gap: 16px !important; margin: 0 !important; text-align: ' + alignment + ' !important; background-color: ' + (colors.appBackground || 'transparent') + ' !important; }\n';
   css += '.cap-options-wrapper .cap-option-group { box-sizing: border-box !important; padding: 0 !important; margin: 0 !important; flex-shrink: 0 !important; border: none !important; }\n';
-  
+
   var labelCSS = 'color: ' + (colors.labelText || '#111827') + ' !important;';
   if (typography.labelCustom) {
     labelCSS += ' font-family: "' + (typography.labelFont || 'Open Sans') + '", sans-serif !important; font-size: ' + (typography.labelSize || 14) + 'px !important;';
   }
   css += '.cap-options-wrapper .cap-label, .form__label { ' + labelCSS + ' }\n';
-  
+
   css += '.cap-options-wrapper .cap-required { color: ' + (colors.requiredCharacter || 'red') + ' !important; }\n';
-  
+
   var helpCSS = 'color: ' + (colors.helpText || '#666') + ' !important;';
   if (typography.helpCustom) {
     helpCSS += ' font-family: "' + (typography.helpFont || 'Open Sans') + '", sans-serif !important; font-size: ' + (typography.helpSize || 14) + 'px !important;';
   }
   css += '.cap-options-wrapper .cap-help-text { ' + helpCSS + ' }\n';
-  
+
   var addonCSS = 'color: ' + (colors.totalText || '#202223') + ' !important;';
   if (typography.addonCustom) {
     addonCSS += ' font-family: "' + (typography.addonFont || 'Open Sans') + '", sans-serif !important; font-size: ' + (typography.addonSize || 14) + 'px !important;';
@@ -601,22 +689,22 @@ function applyDynamicStyles(wrapper) {
   var btnBgHov = colors.buttonBackgroundHover || '#ffffff';
   var btnTextAct = colors.buttonTextActive || '#ffffff';
   var btnBgAct = colors.buttonBackgroundActive || '#eb1256';
-  
+
   var swB = colors.swatchBorder || '#dddddd';
   var swBHov = colors.swatchBorderHover || '#dddddd';
   var swBAct = colors.swatchBorderActive || '#eb1256';
-  
+
   var swSize = borders.swatchSize !== undefined ? borders.swatchSize : 1;
   var swRad = borders.swatchRadius !== undefined ? borders.swatchRadius : 4;
 
   // Base state
   css += '.cap-options-wrapper .cap-button-swatch { color: ' + btnText + ' !important; background-color: ' + btnBg + ' !important; border-color: ' + swB + ' !important; border-width: ' + swSize + 'px !important; border-radius: ' + swRad + 'px !important; }\n';
   css += '.cap-options-wrapper .cap-color-swatch, .cap-options-wrapper .cap-image-swatch { border-color: ' + swB + ' !important; border-width: ' + swSize + 'px !important; border-radius: ' + swRad + 'px !important; border-style: solid !important; }\n';
-  
+
   // Hover state
   css += '.cap-options-wrapper .cap-button-swatch:hover { color: ' + btnTextHov + ' !important; background-color: ' + btnBgHov + ' !important; border-color: ' + swBHov + ' !important; }\n';
   css += '.cap-options-wrapper .cap-color-swatch:hover, .cap-options-wrapper .cap-image-swatch:hover { border-color: ' + swBHov + ' !important; }\n';
-  
+
   // Active/Selected state
   css += '.cap-options-wrapper .cap-button-swatch.cap-selected { color: ' + btnTextAct + ' !important; background-color: ' + btnBgAct + ' !important; border-color: ' + swBAct + ' !important; }\n';
   css += '.cap-options-wrapper .cap-color-swatch.cap-selected, .cap-options-wrapper .cap-image-swatch.cap-selected { border-color: ' + swBAct + ' !important; }\n';
@@ -687,9 +775,11 @@ function validateCustomOptions() {
   });
 
   if (!isValid && firstErrorEl) {
-    var toggleStates = capConfig.settings ? capConfig.settings.toggleStates : {};
+    var toggleStates = getToggleStates();
     if (toggleStates.autoScroll !== false) {
-      firstErrorEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setTimeout(function() {
+        firstErrorEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 50);
     }
   }
 
@@ -776,22 +866,40 @@ function injectIntoCartForm(wrapper, container) {
     observer.observe(wrapper, { childList: true, subtree: true });
   }
 
-  cartForm.addEventListener('submit', function (e) {
+  var submitHandler = function (e) {
     if (!validateCustomOptions()) {
       e.preventDefault();
       e.stopImmediatePropagation();
       return false;
     }
-  });
+  };
+
+  cartForm.addEventListener('submit', submitHandler, true);
+
+  // Guarantee "Go to cart immediately" works by hijacking the button click in capture phase
+  var submitBtn = cartForm.querySelector('button[type="submit"], input[type="submit"], [name="add"], .add-to-cart');
+  if (submitBtn) {
+    submitBtn.addEventListener('click', function(e) {
+      if (!validateCustomOptions()) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        return false;
+      }
+
+      // goToCart logic has been completely removed as requested
+    }, true);
+  }
 
   // Force-inject properties into cart/add fetch requests to bypass any theme serialization quirks
   if (!window.pistalixFetchIntercepted) {
     window.pistalixFetchIntercepted = true;
     var originalFetch = window.fetch;
     window.fetch = function () {
-      var url = arguments[0];
+      var urlArg = arguments[0];
+      var urlStr = typeof urlArg === 'string' ? urlArg : (urlArg && urlArg.url ? urlArg.url : '');
       var config = arguments[1];
-      if (url && typeof url === 'string' && url.indexOf('/cart/add') !== -1) {
+      if (urlStr && urlStr.indexOf('/cart/add') !== -1) {
         if (!validateCustomOptions()) {
           return Promise.reject(new Error("Required options are missing."));
         }
@@ -810,7 +918,11 @@ function injectIntoCartForm(wrapper, container) {
                 if (inp.type === 'radio' && !inp.checked) return;
                 if (inp.type === 'checkbox' && !inp.checked) return;
                 if (inp.disabled) return;
-                if (inp.value) {
+                if (inp.type === 'file') {
+                  if (inp.files && inp.files.length > 0) {
+                    config.body.set(inp.name, inp.files[0]);
+                  }
+                } else if (inp.value) {
                   config.body.set(inp.name, inp.value);
                 }
               });
@@ -854,7 +966,9 @@ function injectIntoCartForm(wrapper, container) {
           }
         }
       }
-      return originalFetch.apply(window, arguments);
+      return originalFetch.apply(window, arguments).then(function (response) {
+        return response;
+      });
     };
   }
 
@@ -894,7 +1008,11 @@ function injectIntoCartForm(wrapper, container) {
               if (inp.type === 'radio' && !inp.checked) return;
               if (inp.type === 'checkbox' && !inp.checked) return;
               if (inp.disabled) return;
-              if (inp.value) {
+              if (inp.type === 'file') {
+                if (inp.files && inp.files.length > 0) {
+                  body.set(inp.name, inp.files[0]);
+                }
+              } else if (inp.value) {
                 body.set(inp.name, inp.value);
               }
             });
@@ -937,6 +1055,12 @@ function injectIntoCartForm(wrapper, container) {
           }
         }
       }
+
+      var self = this;
+      this.addEventListener('load', function () {
+        // goToCart logic removed
+      });
+
       return originalSend.call(this, body);
     };
   }
@@ -1044,6 +1168,160 @@ function renderText(element) {
   group.appendChild(createErrorMsg());
   return group;
 }
+
+function renderFile(element) {
+  var group = createGroup(element);
+  var config = parseConfig(element.config);
+
+  var wrapper = document.createElement('div');
+  wrapper.className = 'cap-file-wrapper';
+
+  var input = document.createElement('input');
+  input.type = 'file';
+  input.name = propName(element.label);
+  input.className = 'cap-file-hidden-input';
+  input.style.display = 'none';
+
+  if (config.allowedExtensions) {
+    input.accept = config.allowedExtensions;
+  }
+  var maxFiles = parseInt(config.maxFiles, 10) || 1;
+  if (maxFiles > 1) {
+    input.multiple = true;
+  }
+  var maxSizeMB = parseInt(config.maxSizeMB, 10) || 10;
+  var maxSizeBytes = maxSizeMB * 1024 * 1024;
+  
+  var p = parseFloat(config.price);
+  if (!isNaN(p) && p > 0) {
+    input.setAttribute('data-price', Math.round(p * 100));
+  }
+
+  // Custom Button UI
+  var btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'cap-button cap-file-button';
+  btn.style.cssText = 'padding: 8px 16px; border-radius: 4px; border: 1px solid var(--p-color-border, #c9cccf); background: var(--p-color-bg-surface-secondary, #f4f6f8); cursor: pointer; display: inline-flex; align-items: center; gap: 8px; font-size: 14px;';
+  btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg> ' + (config.buttonText || 'Upload File');
+  
+  btn.addEventListener('click', function() {
+    input.click();
+  });
+
+  // Success Message Container
+  var successMsg = document.createElement('div');
+  successMsg.className = 'cap-file-success-message';
+  successMsg.style.display = 'none';
+  successMsg.style.color = 'var(--p-color-text-success, #008000)';
+  successMsg.style.fontSize = '14px';
+  successMsg.style.marginTop = '8px';
+  successMsg.textContent = config.successMessage || 'File attached successfully!';
+
+  // Preview container
+  var previewContainer = document.createElement('div');
+  previewContainer.className = 'cap-file-preview';
+  previewContainer.style.display = 'none';
+  previewContainer.style.marginTop = '10px';
+  previewContainer.style.gap = '10px';
+  previewContainer.style.flexWrap = 'wrap';
+  previewContainer.style.display = 'flex';
+
+  var appSettings = capConfig.settings || {};
+  if (typeof appSettings === 'string') {
+    try { appSettings = JSON.parse(appSettings); } catch (e) { /* ignore parse error */ }
+  }
+  var previewSetting = appSettings.filePreview || "Show image if the uploaded file is a photo, otherwise show link";
+
+  input.addEventListener('change', function (e) {
+    var errorMsg = group.querySelector('.cap-error');
+    errorMsg.style.display = 'none';
+    successMsg.style.display = 'none';
+    previewContainer.innerHTML = '';
+    
+    var files = e.target.files;
+    if (!files || files.length === 0) {
+      previewContainer.style.display = 'none';
+      updateTotalPrice();
+      return;
+    }
+
+    // Validation
+    if (files.length > maxFiles) {
+      errorMsg.textContent = "Maximum " + maxFiles + " files allowed.";
+      errorMsg.style.display = 'block';
+      input.value = "";
+      return;
+    }
+    
+    for (var i = 0; i < files.length; i++) {
+      if (files[i].size > maxSizeBytes) {
+        errorMsg.textContent = "File " + files[i].name + " is too large. Max size is " + maxSizeMB + "MB.";
+        errorMsg.style.display = 'block';
+        input.value = "";
+        return;
+      }
+    }
+
+    // Success and Preview
+    successMsg.style.display = 'block';
+    previewContainer.style.display = 'flex';
+
+    Array.from(files).forEach(function(file) {
+      var itemWrap = document.createElement('div');
+      itemWrap.style.display = 'flex';
+      itemWrap.style.alignItems = 'center';
+      itemWrap.style.gap = '8px';
+      itemWrap.style.border = '1px solid var(--p-color-border, #c9cccf)';
+      itemWrap.style.padding = '4px 8px';
+      itemWrap.style.borderRadius = '4px';
+
+      if (file.type.indexOf('image/') === 0 && previewSetting === "Show image if the uploaded file is a photo, otherwise show link") {
+        var imgPreview = document.createElement('img');
+        imgPreview.style.maxWidth = '40px';
+        imgPreview.style.maxHeight = '40px';
+        imgPreview.style.borderRadius = '2px';
+        
+        var reader = new FileReader();
+        reader.onload = function(evt) {
+          imgPreview.src = evt.target.result;
+        };
+        reader.readAsDataURL(file);
+        
+        itemWrap.appendChild(imgPreview);
+      }
+      
+      var textPreview = document.createElement('span');
+      textPreview.style.fontSize = '13px';
+      textPreview.style.color = 'var(--p-color-text-subdued, #666)';
+      textPreview.textContent = file.name;
+      itemWrap.appendChild(textPreview);
+      
+      previewContainer.appendChild(itemWrap);
+    });
+    
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    updateTotalPrice();
+  });
+
+  wrapper.appendChild(btn);
+  wrapper.appendChild(input);
+  wrapper.appendChild(successMsg);
+  wrapper.appendChild(previewContainer);
+
+  if (config.helpText && config.helpTextPosition === "Tooltip") {
+    var label = group.querySelector('.cap-label');
+    if (label) {
+      label.innerHTML += ' <span style="cursor:help; color:var(--p-color-text-subdued, #666);" title="' + escapeHTML(config.helpText) + '">ⓘ</span>';
+    }
+    var existingHelp = group.querySelector('.cap-help-text');
+    if (existingHelp) existingHelp.style.display = 'none';
+  }
+
+  group.appendChild(wrapper);
+  group.appendChild(createErrorMsg());
+  return group;
+}
+
 
 function renderTextarea(element) {
   var group = createGroup(element);
@@ -2490,6 +2768,28 @@ function initCartPageFeatures(toggleStates) {
   var isApplying = false;
   var debounceTimer;
 
+  // Inject robust CSS rule that overrides theme scripts
+  if (!document.getElementById('cap-cart-addon-styles')) {
+    var style = document.createElement('style');
+    style.id = 'cap-cart-addon-styles';
+    style.innerHTML = `
+      .cap-addon-cart-row .cart-item__quantity-wrapper,
+      .cap-addon-cart-row quantity-input,
+      .cap-addon-cart-row .cart__qty,
+      .cap-addon-cart-row .cart-item__quantity,
+      .cap-addon-cart-row input[name^="updates"],
+      .cap-addon-cart-row cart-remove-button,
+      .cap-addon-cart-row .cart__remove,
+      .cap-addon-cart-row .cart-item__remove {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
   function applyCartModifications() {
     if (isApplying) return;
     isApplying = true;
@@ -2553,6 +2853,8 @@ function initCartPageFeatures(toggleStates) {
           var isAddon = propsStr.indexOf('_is_addon') > -1 || propsStr.indexOf('_parent_id') > -1 || propsStr.indexOf('"Addon"') > -1 || propsStr.indexOf('_addon') > -1;
           var hasCustomOptions = propsStr.indexOf('_CustomOptions') > -1 || propsStr.indexOf('"CustomOptions"') > -1 || propsStr.indexOf('_price_adjustments') > -1 || propsStr.indexOf('_base_price') > -1 || propsStr.indexOf('_final_price') > -1;
 
+          console.log("Pistalix Cart Mod:", { itemTitle: item.title, isAddon: isAddon, propsStr: propsStr });
+
           // In case the theme did output the properties, we hide them explicitly
           var domProps = row.querySelectorAll('.product-details__item, .cart-item__details dl div, .cart-item__property, .item-property, dd, .cart-item__details-property');
           domProps.forEach(function (prop) {
@@ -2564,14 +2866,53 @@ function initCartPageFeatures(toggleStates) {
 
           // 1. Hide quantity box and remove button for add-on products
           if (toggleStates.hideQuantity && isAddon) {
-            var qty = row.querySelector('.cart-item__quantity-wrapper, quantity-input, .cart__qty, .cart-item__quantity, input[name^="updates"]');
+            row.classList.add('cap-addon-cart-row');
+            
+            // Still try inline styles just in case
+            var qty = row.querySelector('.cart-item__quantity-wrapper');
+            if (!qty) qty = row.querySelector('quantity-input, .cart__qty, .cart-item__quantity, input[name^="updates"]');
+            
+            console.log("Pistalix Hiding Qty:", qty);
+            
             if (qty) qty.setAttribute('style', 'display: none !important; visibility: hidden !important;');
 
             var removeBtn = row.querySelector('cart-remove-button, .cart__remove, .cart-item__remove');
             if (removeBtn) removeBtn.setAttribute('style', 'display: none !important; visibility: hidden !important;');
           }
 
-          // 2. Show Edit Options button in cart
+          // 2. Visually update prices in cart if they are old
+          if (item.properties && item.properties._final_price && toggleStates.addAddonPriceToProductPrice !== false) {
+            var newPriceStr = (capConfig.moneyFormat || '${{amount}}').replace(/\{\{\s*amount[^}]*\}\}/, item.properties._final_price);
+            
+            // Try to find the single item price element
+            var priceEls = row.querySelectorAll('.price, .cart-item__price-wrapper > .price, .cart__price, .cart-item__price, td:nth-child(3) .price');
+            priceEls.forEach(function(el) {
+               el.innerHTML = newPriceStr;
+            });
+
+            // Try to find the line total price element
+            var lineTotal = (parseFloat(item.properties._final_price) * item.quantity).toFixed(2);
+            if (capConfig.currency && ['BIF', 'CLP', 'DJF', 'GNF', 'JPY', 'KMF', 'KRW', 'LAK', 'PYG', 'RWF', 'UGX', 'VND', 'VUV', 'XAF', 'XOF', 'XPF'].indexOf(capConfig.currency) !== -1) {
+              lineTotal = Math.round(parseFloat(item.properties._final_price) * item.quantity).toString();
+            }
+            var newTotalStr = (capConfig.moneyFormat || '${{amount}}').replace(/\{\{\s*amount[^}]*\}\}/, lineTotal);
+            var totalEls = row.querySelectorAll('.cart-item__totals .price, .cart-item__price-wrapper.cart-item__price-wrapper--total, .cart__final-price, td:nth-child(5) .price');
+            totalEls.forEach(function(el) {
+               el.innerHTML = newTotalStr;
+            });
+            
+            // Also update any span elements containing the price
+            var allMoneySpans = row.querySelectorAll('.money, .price-item');
+            allMoneySpans.forEach(function(el) {
+              if (el.closest('.cart-item__totals, .cart__final-price, td:nth-child(5)')) {
+                el.innerHTML = newTotalStr;
+              } else {
+                el.innerHTML = newPriceStr;
+              }
+            });
+          }
+
+          // 3. Show Edit Options button in cart
           if (toggleStates.showEditOptions && hasCustomOptions) {
             if (!row.querySelector('.cap-edit-options-btn')) {
               var editBtn = document.createElement('a');
@@ -2632,6 +2973,70 @@ function initCartPageFeatures(toggleStates) {
 
   if (document.body) {
     observer.observe(document.body, { childList: true, subtree: true });
+  }
+
+  // === DRAFT ORDER CHECKOUT INTERCEPTOR ===
+  function initCheckoutInterceptor() {
+    document.addEventListener('click', function(e) {
+      var btn = e.target.closest('button[name="checkout"], input[name="checkout"], a[href="/checkout"], .checkout-btn, .cart__checkout-button');
+      if (!btn) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+
+      if (btn.tagName === 'INPUT') btn.value = 'Processing...';
+      else btn.innerText = 'Processing...';
+      
+      btn.style.pointerEvents = 'none';
+      btn.disabled = true;
+
+      var root = window.Shopify && window.Shopify.routes && window.Shopify.routes.root ? window.Shopify.routes.root : '/';
+      if (root.charAt(root.length - 1) !== '/') root += '/';
+
+      // Fetch current cart
+      fetch(root + 'cart.js')
+        .then(function(res) { return res.json(); })
+        .then(function(cart) {
+          var hasOptions = cart.items.some(function(item) {
+            return item.properties && item.properties['_final_price'];
+          });
+
+          // If no custom options are present, go to standard checkout
+          if (!hasOptions) {
+            window.location.href = root + 'checkout';
+            return;
+          }
+
+          // Send to App Proxy
+          return fetch(root + 'apps/product-options/api/checkout', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cart: cart })
+          }).then(function(res) {
+            if (!res.ok) throw new Error('Checkout proxy failed');
+            return res.json();
+          });
+        })
+        .then(function(data) {
+          if (data && data.invoiceUrl) {
+            window.location.href = data.invoiceUrl;
+          } else if (data) {
+            throw new Error('No invoice URL');
+          }
+        })
+        .catch(function(err) {
+          console.error('Pistalix Draft Order error:', err);
+          window.location.href = root + 'checkout';
+        });
+
+    }, true);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initCheckoutInterceptor);
+  } else {
+    initCheckoutInterceptor();
   }
 }
 
