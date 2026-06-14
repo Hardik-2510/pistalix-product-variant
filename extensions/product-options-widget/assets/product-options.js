@@ -113,6 +113,171 @@ if (!window.pistalixSubmitTrackerRegistered) {
   document.addEventListener('submit', function (e) {
     window.pistalixLastSubmittedForm = e.target;
   }, true);
+
+  // Intercept fetch to handle AJAX cart submit calls (for Dawn and other modern themes)
+  var originalFetch = window.fetch;
+  window.fetch = function () {
+    var urlArg = arguments[0];
+    var urlStr = typeof urlArg === 'string' ? urlArg : (urlArg && urlArg.url ? urlArg.url : '');
+    var config = arguments[1];
+    
+    if (urlStr && urlStr.indexOf('/cart/add') !== -1) {
+      if (config && config.body) {
+        var wrapperEl = null;
+        if (window.pistalixLastSubmittedForm) {
+          wrapperEl = window.pistalixLastSubmittedForm.querySelector('.cap-options-wrapper');
+        }
+        if (!wrapperEl) {
+          wrapperEl = document.querySelector('.cap-options-wrapper');
+        }
+        if (wrapperEl) {
+          var inputs = wrapperEl.querySelectorAll('[name^="properties["]');
+          if (config.body instanceof FormData) {
+            inputs.forEach(function (inp) {
+              if (inp.type === 'radio' && !inp.checked) return;
+              if (inp.type === 'checkbox' && !inp.checked) return;
+              if (inp.disabled) return;
+              
+              if (inp.type === 'file') {
+                if (inp.files && inp.files.length > 0) {
+                  if (inp.files.length === 1) {
+                    config.body.set(inp.name, inp.files[0]);
+                  } else {
+                    for (var k = 0; k < inp.files.length; k++) {
+                      var arrName = inp.name.replace(']', ' ' + (k + 1) + ']');
+                      config.body.set(arrName, inp.files[k]);
+                    }
+                  }
+                }
+              } else if (inp.value) {
+                config.body.set(inp.name, inp.value);
+              }
+            });
+          } else if (typeof config.body === 'string') {
+            if (config.body.trim().indexOf('{') === 0) {
+              try {
+                var json = JSON.parse(config.body);
+                if (!json.properties) json.properties = {};
+                inputs.forEach(function (inp) {
+                  if (inp.type === 'radio' && !inp.checked) return;
+                  if (inp.type === 'checkbox' && !inp.checked) return;
+                  if (inp.disabled) return;
+                  if (inp.value) {
+                    var propMatch = inp.name.match(/properties\[(.*?)\]/);
+                    if (propMatch && propMatch[1]) {
+                      json.properties[propMatch[1]] = inp.value;
+                    }
+                  }
+                });
+                config.body = JSON.stringify(json);
+              } catch (e) {
+                console.warn("Pistalix: Fetch JSON parse failed", e);
+              }
+            } else {
+              try {
+                var params = new URLSearchParams(config.body);
+                inputs.forEach(function (inp) {
+                  if (inp.type === 'radio' && !inp.checked) return;
+                  if (inp.type === 'checkbox' && !inp.checked) return;
+                  if (inp.disabled) return;
+                  if (inp.value) {
+                    params.set(inp.name, inp.value);
+                  }
+                });
+                config.body = params.toString();
+              } catch (e) {
+                console.warn("Pistalix: Fetch query string parse failed", e);
+              }
+            }
+          }
+        }
+      }
+    }
+    return originalFetch.apply(window, arguments);
+  };
+
+  // Intercept XMLHttpRequest to handle Axios/jQuery cart submit calls
+  var originalOpen = window.XMLHttpRequest.prototype.open;
+  var originalSend = window.XMLHttpRequest.prototype.send;
+
+  window.XMLHttpRequest.prototype.open = function (method, url) {
+    this._url = url;
+    return originalOpen.apply(this, arguments);
+  };
+
+  window.XMLHttpRequest.prototype.send = function (body) {
+    if (this._url && typeof this._url === 'string' && this._url.indexOf('/cart/add') !== -1) {
+      var wrapperEl = null;
+      if (window.pistalixLastSubmittedForm) {
+        wrapperEl = window.pistalixLastSubmittedForm.querySelector('.cap-options-wrapper');
+      }
+      if (!wrapperEl) {
+        wrapperEl = document.querySelector('.cap-options-wrapper');
+      }
+      if (wrapperEl && body) {
+        var inputs = wrapperEl.querySelectorAll('[name^="properties["]');
+        if (body instanceof FormData) {
+          inputs.forEach(function (inp) {
+            if (inp.type === 'radio' && !inp.checked) return;
+            if (inp.type === 'checkbox' && !inp.checked) return;
+            if (inp.disabled) return;
+            
+            if (inp.type === 'file') {
+              if (inp.files && inp.files.length > 0) {
+                if (inp.files.length === 1) {
+                  body.set(inp.name, inp.files[0]);
+                } else {
+                  for (var k = 0; k < inp.files.length; k++) {
+                    var arrName = inp.name.replace(']', ' ' + (k + 1) + ']');
+                    body.set(arrName, inp.files[k]);
+                  }
+                }
+              }
+            } else if (inp.value) {
+              body.set(inp.name, inp.value);
+            }
+          });
+        } else if (typeof body === 'string') {
+          if (body.trim().indexOf('{') === 0) {
+            try {
+              var json = JSON.parse(body);
+              if (!json.properties) json.properties = {};
+              inputs.forEach(function (inp) {
+                if (inp.type === 'radio' && !inp.checked) return;
+                if (inp.type === 'checkbox' && !inp.checked) return;
+                if (inp.disabled) return;
+                if (inp.value) {
+                  var propMatch = inp.name.match(/properties\[(.*?)\]/);
+                  if (propMatch && propMatch[1]) {
+                    json.properties[propMatch[1]] = inp.value;
+                  }
+                }
+              });
+              body = JSON.stringify(json);
+            } catch (e) {
+              console.warn("Pistalix: XHR JSON parse failed", e);
+            }
+          } else {
+            try {
+              var params = new URLSearchParams(body);
+              inputs.forEach(function (inp) {
+                if (inp.type === 'radio' && !inp.checked) return;
+                if (inp.type === 'checkbox' && !inp.checked) return;
+                if (inp.disabled) return;
+                if (inp.value) {
+                  params.set(inp.name, inp.value);
+                }
+              });
+              body = params.toString();
+            } catch (e) {
+              console.warn("Pistalix: XHR query string parse failed", e);
+            }
+          }
+        }
+      }
+    }
+    return originalSend.call(this, body);
+  };
 }
 
 async function fetchTemplate(productId, shop, appUrl) {
@@ -316,7 +481,8 @@ function updateTotalPrice() {
       }
       inp.value = val;
     };
-    var zeroDecimalCurrencies = ['BIF', 'CLP', 'DJF', 'GNF', 'JPY', 'KMF', 'KRW', 'LAK', 'PYG', 'RWF', 'UGX', 'VND', 'VUV', 'XAF', 'XOF', 'XPF'];
+
+    var zeroDecimalCurrencies = ['JPY', 'KRW', 'TWD', 'VND', 'CLP', 'PYG', 'VUV', 'RWF', 'GNF', 'DJF', 'MGA', 'KMF', 'XAF', 'XOF', 'XPF'];
     var isZeroDecimal = zeroDecimalCurrencies.indexOf(capConfig.currency || 'USD') !== -1;
     var formattedBase = isZeroDecimal ? capConfig.basePrice.toString() : (capConfig.basePrice / 100).toFixed(2);
     var formattedFinal = isZeroDecimal ? finalPriceCents.toString() : (finalPriceCents / 100).toFixed(2);
@@ -920,7 +1086,14 @@ function injectIntoCartForm(wrapper, container) {
                 if (inp.disabled) return;
                 if (inp.type === 'file') {
                   if (inp.files && inp.files.length > 0) {
-                    config.body.set(inp.name, inp.files[0]);
+                    if (inp.files.length === 1) {
+                      config.body.set(inp.name, inp.files[0]);
+                    } else {
+                      for (var k = 0; k < inp.files.length; k++) {
+                        var arrName = inp.name.replace(']', ' ' + (k + 1) + ']');
+                        config.body.set(arrName, inp.files[k]);
+                      }
+                    }
                   }
                 } else if (inp.value) {
                   config.body.set(inp.name, inp.value);
@@ -1010,7 +1183,14 @@ function injectIntoCartForm(wrapper, container) {
               if (inp.disabled) return;
               if (inp.type === 'file') {
                 if (inp.files && inp.files.length > 0) {
-                  body.set(inp.name, inp.files[0]);
+                  if (inp.files.length === 1) {
+                    body.set(inp.name, inp.files[0]);
+                  } else {
+                    for (var k = 0; k < inp.files.length; k++) {
+                      var arrName = inp.name.replace(']', ' ' + (k + 1) + ']');
+                      body.set(arrName, inp.files[k]);
+                    }
+                  }
                 }
               } else if (inp.value) {
                 body.set(inp.name, inp.value);
@@ -2956,87 +3136,4 @@ function initCartPageFeatures(toggleStates) {
 
   // Run initially
   applyCartModificationsDebounced();
-
-  // Re-run on DOM mutations (for ajax carts/drawers)
-  var observer = new MutationObserver(function (mutations) {
-    var shouldApply = false;
-    for (var i = 0; i < mutations.length; i++) {
-      for (var j = 0; j < mutations[i].addedNodes.length; j++) {
-        var node = mutations[i].addedNodes[j];
-        if (node.nodeType === 1 && !node.classList.contains('cap-edit-options-btn')) {
-          shouldApply = true;
-        }
-      }
-    }
-    if (shouldApply) applyCartModificationsDebounced();
-  });
-
-  if (document.body) {
-    observer.observe(document.body, { childList: true, subtree: true });
-  }
-
-  // === DRAFT ORDER CHECKOUT INTERCEPTOR ===
-  function initCheckoutInterceptor() {
-    document.addEventListener('click', function(e) {
-      var btn = e.target.closest('button[name="checkout"], input[name="checkout"], a[href="/checkout"], .checkout-btn, .cart__checkout-button');
-      if (!btn) return;
-
-      e.preventDefault();
-      e.stopPropagation();
-      e.stopImmediatePropagation();
-
-      if (btn.tagName === 'INPUT') btn.value = 'Processing...';
-      else btn.innerText = 'Processing...';
-      
-      btn.style.pointerEvents = 'none';
-      btn.disabled = true;
-
-      var root = window.Shopify && window.Shopify.routes && window.Shopify.routes.root ? window.Shopify.routes.root : '/';
-      if (root.charAt(root.length - 1) !== '/') root += '/';
-
-      // Fetch current cart
-      fetch(root + 'cart.js')
-        .then(function(res) { return res.json(); })
-        .then(function(cart) {
-          var hasOptions = cart.items.some(function(item) {
-            return item.properties && item.properties['_final_price'];
-          });
-
-          // If no custom options are present, go to standard checkout
-          if (!hasOptions) {
-            window.location.href = root + 'checkout';
-            return;
-          }
-
-          // Send to App Proxy
-          return fetch(root + 'apps/product-options/api/checkout', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ cart: cart })
-          }).then(function(res) {
-            if (!res.ok) throw new Error('Checkout proxy failed');
-            return res.json();
-          });
-        })
-        .then(function(data) {
-          if (data && data.invoiceUrl) {
-            window.location.href = data.invoiceUrl;
-          } else if (data) {
-            throw new Error('No invoice URL');
-          }
-        })
-        .catch(function(err) {
-          console.error('Pistalix Draft Order error:', err);
-          window.location.href = root + 'checkout';
-        });
-
-    }, true);
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initCheckoutInterceptor);
-  } else {
-    initCheckoutInterceptor();
-  }
 }
-

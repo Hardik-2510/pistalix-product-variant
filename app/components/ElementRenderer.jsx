@@ -181,43 +181,7 @@ export default function ElementRenderer({ element, value, onChange }) {
       );
     }
 
-    case "file_upload":
-    case "file upload": {
-      const renderLabel = () => {
-        const textLabel = `${label}${getAddOnText(config)}`;
-        if (config.helpText && config.helpTextPosition === "Tooltip") {
-          return (
-            <InlineStack gap="100" blockAlign="center">
-              <Text as="span">{textLabel}</Text>
-              <Tooltip content={config.helpText}>
-                <Text as="span" tone="subdued" cursor="help">ⓘ</Text>
-              </Tooltip>
-            </InlineStack>
-          );
-        }
-        return textLabel;
-      };
 
-      return (
-        <Box>
-          <Text as="p" variant="bodySm" fontWeight="semibold" paddingBlockEnd="100">{renderLabel()}</Text>
-          <div style={{
-            border: "1px dashed var(--p-color-border)",
-            borderRadius: "4px",
-            padding: "16px",
-            textAlign: "center",
-            backgroundColor: "var(--p-color-bg-surface-secondary)"
-          }}>
-            <Button>{config.buttonText || "Upload File"}</Button>
-            <Box paddingBlockStart="100">
-              <Text tone="subdued" variant="bodySm">
-                {config.helpText || `Max size: ${config.maxSizeMB || 10}MB`}
-              </Text>
-            </Box>
-          </div>
-        </Box>
-      );
-    }
 
     case "textarea": {
       const currentLength = (value || "").length;
@@ -708,6 +672,7 @@ export default function ElementRenderer({ element, value, onChange }) {
 
     case "file_upload":
     case "file upload": {
+      const inputId = `file-upload-${element.id || Math.random().toString(36).substr(2, 9)}`;
       const allowedExts = config.allowedExtensions || ".jpeg, .jpg, .png, .webp, .svg";
       const isFileUploaded = value && value instanceof File;
       const fileName = isFileUploaded ? value.name : (typeof value === "string" && value ? value : "");
@@ -739,12 +704,15 @@ export default function ElementRenderer({ element, value, onChange }) {
                    {filePreviewUrl ? (
                      <img src={filePreviewUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                    ) : (
-                     <div style={{ width: "100%", height: "100%", backgroundColor: "#f4f6f8", display: "flex", alignItems: "center", justifyContent: "center", color: "#8c9196", fontSize: "10px", fontWeight: "bold" }}>FILE</div>
+                     <div style={{ width: "100%", height: "100%", backgroundColor: "#F4F6F8", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <Text variant="bodyXs" tone="subdued">FILE</Text>
+                     </div>
                    )}
                  </div>
-                 <span style={{ color: "white", fontSize: "15px", fontWeight: "500", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                   {fileName}
-                 </span>
+                 <div style={{ overflow: "hidden" }}>
+                   <Text as="p" variant="bodyMd" fontWeight="semibold" tone="textInverse" truncate>{fileName}</Text>
+                   {isFileUploaded && <Text as="p" variant="bodyXs" tone="textInverse">{(value.size / 1024 / 1024).toFixed(2)} MB</Text>}
+                 </div>
                </div>
                <button 
                  onClick={(e) => { e.preventDefault(); handleTextChange(null); }}
@@ -762,6 +730,9 @@ export default function ElementRenderer({ element, value, onChange }) {
             </div>
           ) : (
             <label style={{ display: "block", cursor: "pointer" }} htmlFor={inputId}>
+              <span style={{ border: 0, clip: "rect(0 0 0 0)", height: "1px", margin: "-1px", overflow: "hidden", padding: 0, position: "absolute", width: "1px" }}>
+                Upload {label}
+              </span>
               <input 
                 id={inputId}
                 type="file" 
