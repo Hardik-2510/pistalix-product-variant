@@ -1,5 +1,42 @@
-import { BlockStack, Box, Checkbox, InlineStack, Select, TextField, Text, Button } from "@shopify/polaris";
+import { BlockStack, Box, Checkbox, InlineStack, Select, TextField, Text, Button, InlineGrid } from "@shopify/polaris";
 import ColorPickerInput from "./ColorPickerInput";
+import { useState, useEffect } from "react";
+import "react-quill/dist/quill.snow.css";
+
+function ClientRichTextEditor({ value, onChange }) {
+  const [Quill, setQuill] = useState(null);
+
+  useEffect(() => {
+    import("react-quill").then((module) => {
+      setQuill(() => module.default);
+    });
+  }, []);
+
+  if (!Quill) return <TextField value={value} onChange={onChange} multiline={4} autoComplete="off" />;
+
+  const modules = {
+    toolbar: [
+      [{ 'header': [1, 2, 3, 4, 5, 6, false] }],
+      ['bold', 'italic', 'underline', 'strike'],
+      [{ 'align': [] }],
+      [{ 'indent': '-1'}, { 'indent': '+1' }],
+      [{ 'color': [] }, { 'background': [] }],
+      ['link', 'blockquote'],
+      [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+      ['clean']
+    ]
+  };
+
+  return (
+    <div style={{ background: "white", borderRadius: "8px", border: "1px solid #c9cccf", overflow: "hidden" }}>
+      <style>{`
+        .ql-toolbar.ql-snow { border: none; border-bottom: 1px solid #c9cccf; background: #f4f6f8; padding: 4px 8px; }
+        .ql-container.ql-snow { border: none; min-height: 100px; font-family: inherit; font-size: 14px; }
+      `}</style>
+      <Quill theme="snow" value={value || ""} onChange={onChange} modules={modules} />
+    </div>
+  );
+}
 
 export default function ElementConfigForm({ element, updateField, updateConfig }) {
   const config = element.config || {};
@@ -296,9 +333,31 @@ export default function ElementConfigForm({ element, updateField, updateConfig }
       {(typeStr === "popup_modal" || element.type === "Pop-up Modal") && (
         <BlockStack gap="300">
           <TextField label="Trigger text" value={config.triggerText || "Open Modal"} onChange={(v) => updateConfig("triggerText", v)} />
-          <TextField label="Modal title" value={config.title || ""} onChange={(v) => updateConfig("title", v)} />
-          <TextField label="Modal content" value={config.content || ""} onChange={(v) => updateConfig("content", v)} multiline={4} />
-          <Select label="Modal width" options={["small", "medium", "large"]} value={config.modalWidth || "medium"} onChange={(v) => updateConfig("modalWidth", v)} />
+          <InlineGrid columns={2} gap="400">
+            <TextField 
+              label="Modal title" 
+              value={config.title || ""} 
+              onChange={(v) => updateConfig("title", v)} 
+            />
+            <TextField 
+              label="Modal width" 
+              type="number" 
+              value={config.modalWidth || "450"} 
+              onChange={(v) => updateConfig("modalWidth", v)} 
+              suffix="px" 
+              autoComplete="off" 
+            />
+          </InlineGrid>
+          <Box>
+            <InlineStack align="start" blockAlign="center" gap="200" paddingBlockEnd="100">
+              <Text as="p" variant="bodyMd">Modal content</Text>
+              <div style={{ background: '#f4f6f8', padding: '2px 8px', borderRadius: '12px', fontSize: '12px', fontWeight: 'bold', color: '#5c6ac4' }}>en</div>
+            </InlineStack>
+            <ClientRichTextEditor 
+               value={config.content || ""} 
+               onChange={(v) => updateConfig("content", v)} 
+            />
+          </Box>
         </BlockStack>
       )}
 

@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import ConditionalLogicEditor from "./ConditionalLogicEditor";
 import TargetedActionsEditor from "./TargetedActionsEditor";
 import ColorPickerInput from "./ColorPickerInput";
 import ImageUploadInput from "./ImageUploadInput";
+import { Editor } from "@tinymce/tinymce-react";
 import {
   Card,
   BlockStack,
@@ -16,7 +17,44 @@ import {
   ButtonGroup,
   Select,
   Banner,
+  InlineGrid,
 } from "@shopify/polaris";
+
+function ClientRichTextEditor({ value, onChange }) {
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  if (!isMounted) return <TextField value={value} onChange={onChange} multiline={4} autoComplete="off" />;
+
+  return (
+    <div style={{ borderRadius: "8px", border: "1px solid #c9cccf", overflow: "hidden" }}>
+      <Editor
+        tinymceScriptSrc="https://cdnjs.cloudflare.com/ajax/libs/tinymce/6.8.3/tinymce.min.js"
+        value={value || ""}
+        onEditorChange={(content) => onChange(content)}
+        init={{
+          height: 300,
+          menubar: false,
+          statusbar: true,
+          elementpath: false,
+          resize: true,
+          plugins: [
+            'advlist', 'autolink', 'lists', 'link', 'image', 'charmap', 'preview',
+            'anchor', 'searchreplace', 'visualblocks', 'code', 'fullscreen',
+            'insertdatetime', 'media', 'table', 'code', 'help', 'wordcount'
+          ],
+          toolbar: 'blocks | bold italic underline strikethrough | alignleft aligncenter alignright alignjustify | indent outdent | forecolor backcolor | link blockquote | numlist bullist | removeformat | table',
+          content_style: 'body { font-family:-apple-system,BlinkMacSystemFont,San Francisco,Segoe UI,Roboto,Helvetica Neue,sans-serif; font-size:14px; margin: 8px; }',
+          promotion: false,
+          branding: false,
+        }}
+      />
+    </div>
+  );
+}
 
 /**
  * ElementEditor — Detailed configuration form for a single template element.
@@ -352,6 +390,43 @@ export default function ElementEditor({ element, allElements = [], onChange, onB
                 </Box>
               )}
 
+              {/* Divider Settings */}
+              {element.type === "Divider" && (
+                <Box paddingBlockStart="400" paddingBlockEnd="400">
+                  <BlockStack gap="400">
+                    <Text variant="headingSm" as="h3">Divider Settings</Text>
+                    <InlineGrid columns={2} gap="400">
+                      <Box>
+                        <Text as="p" paddingBlockEnd="100">Color</Text>
+                        <ColorPickerInput 
+                          value={element.config?.color || "#bbbbbb"} 
+                          onChange={(val) => handleConfigChange("color", val)}
+                        />
+                      </Box>
+                      <Box>
+                        <Text as="p" paddingBlockEnd="100">Style</Text>
+                        <ButtonGroup variant="segmented" fullWidth>
+                          <Button pressed={element.config?.style === "solid" || !element.config?.style} onClick={() => handleConfigChange("style", "solid")}>Solid</Button>
+                          <Button pressed={element.config?.style === "double"} onClick={() => handleConfigChange("style", "double")}>Double</Button>
+                          <Button pressed={element.config?.style === "dashed"} onClick={() => handleConfigChange("style", "dashed")}>Dashed</Button>
+                          <Button pressed={element.config?.style === "dotted"} onClick={() => handleConfigChange("style", "dotted")}>Dotted</Button>
+                        </ButtonGroup>
+                      </Box>
+                    </InlineGrid>
+                    <Box width="50%">
+                      <TextField 
+                        label="Thickness" 
+                        type="number" 
+                        value={element.config?.thickness || "1"} 
+                        onChange={(val) => handleConfigChange("thickness", val)} 
+                        suffix="px" 
+                        autoComplete="off" 
+                      />
+                    </Box>
+                  </BlockStack>
+                </Box>
+              )}
+
               {/* Paragraph / HTML Settings */}
               {["Paragraph", "HTML"].includes(element.type) && (
                 <Box paddingBlockStart="400" paddingBlockEnd="400">
@@ -367,8 +442,26 @@ export default function ElementEditor({ element, allElements = [], onChange, onB
                 <Box paddingBlockStart="400" paddingBlockEnd="400">
                   <BlockStack gap="400">
                     <Text variant="headingSm" as="h3">Pop-up Modal Settings</Text>
-                    <TextField label="Link Text" value={element.config?.triggerText || "View Details"} onChange={(val) => handleConfigChange("triggerText", val)} autoComplete="off" />
-                    <TextField label="Modal Content (HTML)" value={element.config?.content || ""} onChange={(val) => handleConfigChange("content", val)} multiline={4} autoComplete="off" />
+                    <Box width="50%">
+                      <TextField 
+                        label="Modal width" 
+                        type="number" 
+                        value={element.config?.modalWidth || "450"} 
+                        onChange={(val) => handleConfigChange("modalWidth", val)} 
+                        suffix="px" 
+                        autoComplete="off" 
+                      />
+                    </Box>
+                    <Box>
+                      <InlineStack align="start" blockAlign="center" gap="200" paddingBlockEnd="100">
+                        <Text as="p" variant="bodyMd">Modal content</Text>
+                        <div style={{ background: '#f4f6f8', padding: '2px 8px', borderRadius: '12px', fontSize: '12px', fontWeight: 'bold', color: '#5c6ac4' }}>en</div>
+                      </InlineStack>
+                      <ClientRichTextEditor 
+                         value={element.config?.content || ""} 
+                         onChange={(val) => handleConfigChange("content", val)} 
+                      />
+                    </Box>
                   </BlockStack>
                 </Box>
               )}
@@ -635,6 +728,8 @@ export default function ElementEditor({ element, allElements = [], onChange, onB
               <Box paddingBlockStart="400">
                 <BlockStack gap="400">
                   <Text variant="headingSm" as="h3">Advanced Features (Unlocked)</Text>
+
+
                   
                   {/* Min / Max Characters */}
                   {showMinMaxChars && (
@@ -720,6 +815,148 @@ export default function ElementEditor({ element, allElements = [], onChange, onB
 
           {selectedTab === 1 && (
             <BlockStack gap="400">
+              {/* Scroll Settings */}
+              {["Radio Button", "Checkbox", "Button", "Color Swatch", "Image Swatch"].includes(typeStr) && (
+                <BlockStack gap="400">
+                  <Box>
+                    <Text as="p" paddingBlockEnd="200">Scroll type</Text>
+                    <ButtonGroup variant="segmented" fullWidth>
+                      <Button
+                        pressed={element.config?.scrollType === "Default" || !element.config?.scrollType}
+                        onClick={() => handleConfigChange("scrollType", "Default")}
+                      >
+                        Default
+                      </Button>
+                      <Button
+                        pressed={element.config?.scrollType === "By fixed height"}
+                        onClick={() => handleConfigChange("scrollType", "By fixed height")}
+                      >
+                        By fixed height
+                      </Button>
+                      <Button
+                        pressed={element.config?.scrollType === "By number of option values"}
+                        onClick={() => handleConfigChange("scrollType", "By number of option values")}
+                      >
+                        By number of option values
+                      </Button>
+                    </ButtonGroup>
+                  </Box>
+                  
+                  {element.config?.scrollType === "By fixed height" && (
+                    <Box>
+                      <TextField
+                        label="Scroll height"
+                        type="number"
+                        min={1}
+                        value={element.config?.scrollHeight || ""}
+                        onChange={(val) => handleConfigChange("scrollHeight", val)}
+                        suffix="px"
+                        autoComplete="off"
+                      />
+                    </Box>
+                  )}
+
+                  {element.config?.scrollType === "By number of option values" && (
+                    <Box>
+                      <TextField
+                        label="Number of option values"
+                        type="number"
+                        min={1}
+                        value={element.config?.scrollVisibleItems || ""}
+                        onChange={(val) => handleConfigChange("scrollVisibleItems", val)}
+                        autoComplete="off"
+                      />
+                    </Box>
+                  )}
+                </BlockStack>
+              )}
+
+              {/* Image Swatch Specific Settings */}
+              {typeStr === "Image Swatch" && (
+                <BlockStack gap="400">
+                  <InlineGrid columns={2} gap="400">
+                    <Box>
+                      <TextField
+                        label="Swatch image width"
+                        type="number"
+                        min={1}
+                        value={element.config?.swatchWidth || "50"}
+                        onChange={(val) => handleConfigChange("swatchWidth", val)}
+                        suffix="px"
+                        autoComplete="off"
+                      />
+                    </Box>
+                    <Box>
+                      <TextField
+                        label="Swatch image height"
+                        type="number"
+                        min={1}
+                        value={element.config?.swatchHeight || "50"}
+                        onChange={(val) => handleConfigChange("swatchHeight", val)}
+                        suffix="px"
+                        autoComplete="off"
+                      />
+                    </Box>
+                  </InlineGrid>
+                  <Box>
+                    <Text as="p" paddingBlockEnd="200">Direction style</Text>
+                    <InlineGrid columns={2} gap="400">
+                      {/* Vertical */}
+                      <div
+                        onClick={() => handleConfigChange("directionStyle", "vertical")}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            handleConfigChange("directionStyle", "vertical");
+                          }
+                        }}
+                        role="button"
+                        tabIndex={0}
+                        style={{
+                          border: element.config?.directionStyle === "vertical" ? "2px solid #000" : "1px solid #c9cccf",
+                          borderRadius: "8px", padding: "16px", cursor: "pointer", display: "flex", flexDirection: "column",
+                          alignItems: "center", gap: "8px", minHeight: "134px", justifyContent: "center"
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                          <div style={{ width: "30px", height: "30px", background: "#f4f6f8", border: "2px solid #e11d48", borderRadius: "2px" }}></div>
+                          <span style={{ fontSize: "12px" }}>Option_1</span>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                          <div style={{ width: "30px", height: "30px", background: "#f4f6f8", border: "1px solid #c9cccf", borderRadius: "2px" }}></div>
+                          <span style={{ fontSize: "12px" }}>Option_2</span>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                          <div style={{ width: "30px", height: "30px", background: "#f4f6f8", border: "1px solid #c9cccf", borderRadius: "2px" }}></div>
+                          <span style={{ fontSize: "12px" }}>Option_3</span>
+                        </div>
+                      </div>
+                      {/* Horizontal */}
+                      <div
+                        onClick={() => handleConfigChange("directionStyle", "horizontal")}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            handleConfigChange("directionStyle", "horizontal");
+                          }
+                        }}
+                        role="button"
+                        tabIndex={0}
+                        style={{
+                          border: element.config?.directionStyle !== "vertical" ? "2px solid #000" : "1px solid #c9cccf",
+                          borderRadius: "8px", padding: "16px", cursor: "pointer", display: "flex", justifyContent: "center",
+                          alignItems: "center", gap: "8px", minHeight: "134px"
+                        }}
+                      >
+                        <div style={{ width: "40px", height: "40px", background: "#f4f6f8", border: "2px solid #e11d48", borderRadius: "2px" }}></div>
+                        <div style={{ width: "40px", height: "40px", background: "#f4f6f8", border: "1px solid #c9cccf", borderRadius: "2px" }}></div>
+                        <div style={{ width: "40px", height: "40px", background: "#f4f6f8", border: "1px solid #c9cccf", borderRadius: "2px" }}></div>
+                      </div>
+                    </InlineGrid>
+                  </Box>
+                </BlockStack>
+              )}
+
               {/* Allowed value */}
               <Box>
                 <Text as="p" variant="bodySm" tone="subdued" paddingBlockEnd="100">

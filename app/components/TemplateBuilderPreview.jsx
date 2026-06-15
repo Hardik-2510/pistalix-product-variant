@@ -101,7 +101,7 @@ export default function TemplateBuilderPreview({ elements = [], sections = [] })
                 <div key={section.id} style={{ backgroundColor: bg, padding: paddingStr, color: color, borderRadius: '8px' }}>
                   <InlineStack wrap gap="400">
                     {sectionElements.map((el) => {
-                      const width = el.config?.width || "100%";
+                      const width = el.config?.columnWidth || "100%";
                       const calculatedWidth = width.includes("%") && width !== "100%" 
                         ? `calc(${width} - 8px)` 
                         : width;
@@ -121,7 +121,7 @@ export default function TemplateBuilderPreview({ elements = [], sections = [] })
             }) : (
               <InlineStack wrap gap="400">
                 {visibleElements.map((el) => {
-                  const width = el.config?.width || "100%";
+                  const width = el.config?.columnWidth || "100%";
                   const calculatedWidth = width.includes("%") && width !== "100%" 
                     ? `calc(${width} - 8px)` 
                     : width;

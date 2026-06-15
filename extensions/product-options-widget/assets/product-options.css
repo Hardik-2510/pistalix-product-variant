@@ -13,7 +13,8 @@
   all: revert;
   /* Now re-add only what we need for the wrapper itself */
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  flex-wrap: wrap;
   gap: 16px;
   margin: 20px 0;
   position: relative;

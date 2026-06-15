@@ -802,7 +802,7 @@ function applyDynamicStyles(wrapper) {
   }
 
   // General
-  css += '.cap-options-wrapper { display: flex !important; flex-wrap: wrap !important; gap: 16px !important; margin: 0 !important; text-align: ' + alignment + ' !important; background-color: ' + (colors.appBackground || 'transparent') + ' !important; }\n';
+  css += '.cap-options-wrapper { display: flex !important; flex-direction: row !important; flex-wrap: wrap !important; gap: 16px !important; margin: 0 !important; text-align: ' + alignment + ' !important; background-color: ' + (colors.appBackground || 'transparent') + ' !important; }\n';
   css += '.cap-options-wrapper .cap-option-group { box-sizing: border-box !important; padding: 0 !important; margin: 0 !important; flex-shrink: 0 !important; border: none !important; }\n';
 
   var labelCSS = 'color: ' + (colors.labelText || '#111827') + ' !important;';
@@ -2265,6 +2265,30 @@ function renderImageDropdown(element) {
   return group;
 }
 
+function applyScrollStyle(wrap, config, typeStr) {
+  if (config.scrollType === 'By fixed height' && config.scrollHeight) {
+    wrap.style.maxHeight = config.scrollHeight + 'px';
+    wrap.style.overflowY = 'auto';
+    wrap.style.overflowX = 'hidden';
+    wrap.style.paddingRight = '8px';
+  } else if (config.scrollType === 'By number of option values' && config.scrollVisibleItems) {
+    var n = parseInt(config.scrollVisibleItems) || 3;
+    var isVertical = config.directionStyle === 'vertical';
+    var gap = (typeStr === 'image swatch' && isVertical) ? 12 : 8;
+    
+    var itemH = 20;
+    if (typeStr === 'image swatch') itemH = parseInt(config.swatchHeight || 50);
+    else if (typeStr === 'color swatch' || typeStr === 'button') itemH = 36;
+    else itemH = 24;
+    
+    var totalHeight = (itemH * n) + (gap * Math.max(0, n - 1));
+    wrap.style.maxHeight = totalHeight + 'px';
+    wrap.style.overflowY = 'auto';
+    wrap.style.overflowX = 'hidden';
+    wrap.style.paddingRight = '8px';
+  }
+}
+
 function renderRadio(element) {
   var group = createGroup(element);
   var config = parseConfig(element.config);
@@ -2277,6 +2301,7 @@ function renderRadio(element) {
 
   var wrap = document.createElement('div');
   wrap.className = 'cap-radio-group';
+  applyScrollStyle(wrap, config, 'radio button');
 
   choices.forEach(function (opt) {
     var label = document.createElement('label');
@@ -2323,6 +2348,7 @@ function renderCheckbox(element) {
 
   var wrap = document.createElement('div');
   wrap.className = 'cap-checkbox-group';
+  applyScrollStyle(wrap, config, 'checkbox');
 
   var defaultValues = [];
 
@@ -2378,6 +2404,7 @@ function renderButtonSwatch(element) {
 
   var wrap = document.createElement('div');
   wrap.className = 'cap-swatch-group';
+  applyScrollStyle(wrap, config, 'button');
 
   choices.forEach(function (opt) {
     var btn = document.createElement('button');
@@ -2421,6 +2448,7 @@ function renderColorSwatch(element) {
 
   var wrap = document.createElement('div');
   wrap.className = 'cap-swatch-group';
+  applyScrollStyle(wrap, config, 'color swatch');
 
   var textDisplay = document.createElement('div');
   textDisplay.className = 'cap-help-text';
@@ -2471,18 +2499,46 @@ function renderImageSwatch(element) {
 
   var wrap = document.createElement('div');
   wrap.className = 'cap-swatch-group';
+  applyScrollStyle(wrap, config, 'image swatch');
+
+  var isVertical = config.directionStyle === 'vertical';
+  if (isVertical) {
+    wrap.style.display = 'flex';
+    wrap.style.flexDirection = 'column';
+    wrap.style.gap = '12px';
+    wrap.style.flexWrap = 'nowrap';
+  } else {
+    wrap.style.display = 'flex';
+    wrap.style.flexWrap = 'wrap';
+    wrap.style.gap = '8px';
+  }
 
   var textDisplay = document.createElement('div');
   textDisplay.className = 'cap-help-text';
   textDisplay.style.marginTop = '4px';
 
   choices.forEach(function (opt) {
+    var optionWrap = document.createElement('div');
+    if (isVertical) {
+      optionWrap.style.display = 'flex';
+      optionWrap.style.width = '100%';
+      optionWrap.style.alignItems = 'center';
+      optionWrap.style.gap = '12px';
+    } else {
+      optionWrap.style.display = 'inline-flex';
+    }
+
     var swatch = document.createElement('img');
     swatch.className = 'cap-image-swatch';
     swatch.src = opt.image || '';
     swatch.alt = opt.label;
     swatch.title = opt.label;
     swatch.setAttribute('data-price', getOptionPriceCents(opt));
+
+    swatch.style.width = (config.swatchWidth || 50) + 'px';
+    swatch.style.height = (config.swatchHeight || 50) + 'px';
+    swatch.style.objectFit = 'cover';
+    swatch.style.cursor = 'pointer';
 
     if (isDefault(opt)) {
       swatch.classList.add('cap-selected');
@@ -2500,7 +2556,20 @@ function renderImageSwatch(element) {
       updateTotalPrice();
     });
 
-    wrap.appendChild(swatch);
+    optionWrap.appendChild(swatch);
+
+    if (isVertical) {
+      var labelSpan = document.createElement('span');
+      labelSpan.textContent = getOptionLabel(opt);
+      labelSpan.style.fontSize = '14px';
+      labelSpan.style.cursor = 'pointer';
+      labelSpan.addEventListener('click', function() {
+        swatch.click();
+      });
+      optionWrap.appendChild(labelSpan);
+    }
+
+    wrap.appendChild(optionWrap);
   });
 
   group.appendChild(hiddenInput);
@@ -2532,6 +2601,7 @@ function renderHeading(element) {
 }
 
 function renderDivider(element) {
+  var config = element ? parseConfig(element.config) : {};
   var div = document.createElement('div');
   div.className = 'cap-option-group';
   if (element) {
@@ -2542,6 +2612,9 @@ function renderDivider(element) {
   }
   var hr = document.createElement('hr');
   hr.className = 'cap-divider';
+  hr.style.border = 'none';
+  hr.style.borderTop = (config.thickness || 1) + 'px ' + (config.style || 'solid') + ' ' + (config.color || '#bbbbbb');
+  hr.style.margin = '20px 0';
   div.appendChild(hr);
   return div;
 }
@@ -2642,12 +2715,14 @@ function renderPopupModal(element) {
     'align-items:center'
   ].join(';');
 
+  var modalWidth = config.modalWidth || '560px';
+
   var modal = document.createElement('div');
   modal.style.cssText = [
     'background:white',
     'border-radius:8px',
     'padding:24px',
-    'max-width:560px',
+    'max-width:' + modalWidth,
     'width:90%',
     'max-height:80vh',
     'overflow-y:auto',

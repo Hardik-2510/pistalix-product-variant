@@ -1,6 +1,7 @@
+/* eslint-disable jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */
 import {
-  TextField, Select, Divider, Text, Box, InlineStack, BlockStack, RadioButton,
-  Checkbox as PolarisCheckbox, Button, Popover, ActionList, Modal, Tooltip
+  TextField, Select, Text, Box, InlineStack, BlockStack, RadioButton,
+  Checkbox as PolarisCheckbox, Button, Popover, ActionList, Tooltip
 } from "@shopify/polaris";
 import { useState } from "react";
 import ColorPickerInput from "./ColorPickerInput";
@@ -76,6 +77,27 @@ export default function ElementRenderer({ element, value, onChange }) {
     return ` (+${p}$)`;
   };
 
+  const getScrollStyle = () => {
+    if (!["radio button", "checkbox", "button", "color swatch", "image swatch"].includes(typeStr)) return {};
+    if (config.scrollType === "By fixed height" && config.scrollHeight) {
+      return { maxHeight: `${config.scrollHeight}px`, overflowY: 'auto', overflowX: 'hidden', paddingRight: '8px' };
+    }
+    if (config.scrollType === "By number of option values" && config.scrollVisibleItems) {
+      const n = parseInt(config.scrollVisibleItems) || 3;
+      const isVertical = config.directionStyle === "vertical";
+      const gap = (typeStr === "image swatch" && isVertical) ? 12 : 8;
+      
+      let itemHeight = 20; 
+      if (typeStr === "image swatch") itemHeight = parseInt(config.swatchHeight || 50);
+      else if (typeStr === "color swatch" || typeStr === "button") itemHeight = 36;
+      else itemHeight = 24; // radio/checkbox
+      
+      const totalHeight = (itemHeight * n) + (gap * (Math.max(0, n - 1)));
+      return { maxHeight: `${totalHeight}px`, overflowY: 'auto', overflowX: 'hidden', paddingRight: '8px' };
+    }
+    return {};
+  };
+
   switch (typeStr) {
     case "text":
     case "number":
@@ -142,6 +164,7 @@ export default function ElementRenderer({ element, value, onChange }) {
       const maxL = config.maxCharacter;
       const showCount = isTextLike && (config.characterCounter || maxL);
       const charCountText = maxL ? `${currentLength}/${maxL} characters` : `${currentLength} characters`;
+
 
       const renderLabel = () => {
         const textLabel = `${label}${getAddOnText(config)}`;
@@ -365,19 +388,21 @@ export default function ElementRenderer({ element, value, onChange }) {
         <Box>
           <Text as="p" variant="bodySm" fontWeight="semibold">{label}</Text>
           <Box paddingBlockStart="200">
-            <BlockStack gap="100">
-              {optionsList.map((o, i) => {
-                const optValue = o.id || o.value || o.label || String(i);
-                return (
-                  <RadioButton 
-                    key={i} 
-                    label={`${o.label}${getAddOnText(o)}`} 
-                    checked={activeValue === optValue} 
-                    onChange={() => handleChoiceChange(optValue)} 
-                  />
-                );
-              })}
-            </BlockStack>
+            <div style={getScrollStyle()}>
+              <BlockStack gap="100">
+                {optionsList.map((o, i) => {
+                  const optValue = o.id || o.value || o.label || String(i);
+                  return (
+                    <RadioButton 
+                      key={i} 
+                      label={`${o.label}${getAddOnText(o)}`} 
+                      checked={activeValue === optValue} 
+                      onChange={() => handleChoiceChange(optValue)} 
+                    />
+                  );
+                })}
+              </BlockStack>
+            </div>
           </Box>
         </Box>
       );
@@ -390,22 +415,43 @@ export default function ElementRenderer({ element, value, onChange }) {
         <Box>
           <Text as="p" variant="bodySm" fontWeight="semibold">{label}</Text>
           <Box paddingBlockStart="200">
-            <BlockStack gap="100">
-              {optionsList.map((o, i) => {
-                const optValue = o.id || o.value || o.label || String(i);
-                return (
-                  <PolarisCheckbox 
-                    key={i} 
-                    label={`${o.label}${getAddOnText(o)}`} 
-                    checked={currentValues.includes(optValue)} 
-                    onChange={(checked) => {
-                      if (checked) handleChoiceChange([...currentValues, optValue]);
-                      else handleChoiceChange(currentValues.filter(v => v !== optValue));
-                    }} 
-                  />
-                );
-              })}
-            </BlockStack>
+            {typeStr === "select" ? (
+              <BlockStack gap="100">
+                {optionsList.map((o, i) => {
+                  const optValue = o.id || o.value || o.label || String(i);
+                  return (
+                    <PolarisCheckbox 
+                      key={i} 
+                      label={`${o.label}${getAddOnText(o)}`} 
+                      checked={currentValues.includes(optValue)} 
+                      onChange={(checked) => {
+                        if (checked) handleChoiceChange([...currentValues, optValue]);
+                        else handleChoiceChange(currentValues.filter(v => v !== optValue));
+                      }} 
+                    />
+                  );
+                })}
+              </BlockStack>
+            ) : (
+              <div style={getScrollStyle()}>
+                <BlockStack gap="100">
+                  {optionsList.map((o, i) => {
+                    const optValue = o.id || o.value || o.label || String(i);
+                    return (
+                      <PolarisCheckbox 
+                        key={i} 
+                        label={`${o.label}${getAddOnText(o)}`} 
+                        checked={currentValues.includes(optValue)} 
+                        onChange={(checked) => {
+                          if (checked) handleChoiceChange([...currentValues, optValue]);
+                          else handleChoiceChange(currentValues.filter(v => v !== optValue));
+                        }} 
+                      />
+                    );
+                  })}
+                </BlockStack>
+              </div>
+            )}
           </Box>
         </Box>
       );
@@ -432,7 +478,7 @@ export default function ElementRenderer({ element, value, onChange }) {
             )}
           </Text>
           <Box paddingBlockStart="200">
-            <InlineStack gap="200" wrap>
+            <div style={{ ...getScrollStyle(), display: 'flex', flexDirection: typeStr === "image swatch" && config.directionStyle === "vertical" ? 'column' : 'row', gap: typeStr === "image swatch" && config.directionStyle === "vertical" ? '12px' : '8px', flexWrap: typeStr === "image swatch" && config.directionStyle === "vertical" ? 'nowrap' : 'wrap' }}>
               {optionsList.map((s, i) => {
                 const optValue = s.id || s.value || s.label || String(i);
                 const isSelected = currentValues.includes(optValue);
@@ -482,8 +528,8 @@ export default function ElementRenderer({ element, value, onChange }) {
                 }
 
                 if (typeStr === "image swatch") {
-                  return (
-                    <Tooltip key={i} content={`${s.label}${getAddOnText(s)}`} preferredPosition="above">
+                  const isVertical = config.directionStyle === "vertical";
+                  const swatchDiv = (
                       <div
                         onClick={() => {
                           if (isMulti) {
@@ -507,7 +553,7 @@ export default function ElementRenderer({ element, value, onChange }) {
                         role="button"
                         tabIndex={0}
                         style={{
-                          width: "70px", height: "70px",
+                          width: `${config.swatchWidth || 50}px`, height: `${config.swatchHeight || 50}px`,
                           borderRadius: "4px",
                           border: isSelected ? "2px solid var(--p-color-border-brand)" : "1px solid var(--p-color-border)",
                           cursor: "pointer",
@@ -528,7 +574,17 @@ export default function ElementRenderer({ element, value, onChange }) {
                           </div>
                         )}
                       </div>
-                    </Tooltip>
+                  );
+
+                  return (
+                    <div key={i} style={{ display: isVertical ? 'flex' : 'block', width: isVertical ? '100%' : 'auto', alignItems: 'center', gap: '12px' }}>
+                      <Tooltip content={`${s.label}${getAddOnText(s)}`} preferredPosition="above">
+                        {swatchDiv}
+                      </Tooltip>
+                      {isVertical && (
+                        <Text as="span" variant="bodyMd">{s.label}{getAddOnText(s)}</Text>
+                      )}
+                    </div>
                   );
                 }
                 return (
@@ -549,7 +605,7 @@ export default function ElementRenderer({ element, value, onChange }) {
                   </Button>
                 );
               })}
-            </InlineStack>
+            </div>
           </Box>
         </Box>
       );
@@ -559,7 +615,15 @@ export default function ElementRenderer({ element, value, onChange }) {
     case "heading":
       return <Text variant="headingMd" as="h3" fontWeight={config.fontWeight || "bold"}>{config.content || label}</Text>;
     case "divider":
-      return <Divider />;
+      return (
+        <hr 
+          style={{ 
+            border: 'none', 
+            borderTop: `${config.thickness || 1}px ${config.style || 'solid'} ${config.color || '#bbbbbb'}`, 
+            margin: '10px 0' 
+          }} 
+        />
+      );
     case "spacing":
       return <Box minHeight={`${config.height || 20}px`} />;
     case "paragraph":
@@ -572,17 +636,34 @@ export default function ElementRenderer({ element, value, onChange }) {
       return (
         <>
           <Button variant="plain" onClick={() => setModalActive(true)}>
-             {config.triggerText || label} ↗
+             {label} ↗
           </Button>
-          <Modal
-             open={modalActive}
-             onClose={() => setModalActive(false)}
-             title={config.title || label || "Details"}
-          >
-             <Modal.Section>
+          {modalActive && (
+            <div 
+              style={{
+                position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
+                background: 'rgba(0,0,0,0.55)', zIndex: 999999, display: 'flex',
+                alignItems: 'center', justifyContent: 'center'
+              }}
+              onClick={() => setModalActive(false)}
+            >
+              <div 
+                style={{
+                  background: 'white', borderRadius: '8px', padding: '24px',
+                  maxWidth: `${config.modalWidth || 560}px`, width: '90%',
+                  maxHeight: '80vh', overflowY: 'auto', position: 'relative',
+                  boxShadow: '0 20px 60px rgba(0,0,0,0.3)', color: '#111827'
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid #e5e7eb', paddingBottom: '12px' }}>
+                  <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold' }}>{label || "Details"}</h2>
+                  <button onClick={() => setModalActive(false)} style={{ background: 'none', border: 'none', fontSize: '24px', cursor: 'pointer', lineHeight: 1 }}>&times;</button>
+                </div>
                 <div dangerouslySetInnerHTML={{ __html: config.content || "<p>No content provided.</p>" }} />
-             </Modal.Section>
-          </Modal>
+              </div>
+            </div>
+          )}
         </>
       );
 
