@@ -31,13 +31,21 @@ export const loader = async ({ request }) => {
 };
 
 export const action = async ({ request }) => {
-  await authenticate.admin(request);
+  const { admin } = await authenticate.admin(request);
   const formData = await request.formData();
   const intent = formData.get("intent");
   
   if (intent === "delete") {
     const ids = JSON.parse(formData.get("ids") || "[]");
     if (ids.length > 0) {
+      const { clearOptionSetMetafields } = await import("../lib/metafields.server.js");
+      for (const id of ids) {
+        try {
+          await clearOptionSetMetafields(id, admin);
+        } catch (e) {
+          console.error("Failed to clear metafields on bulk delete for id " + id + ":", e);
+        }
+      }
       await prisma.optionSet.deleteMany({ where: { id: { in: ids } } });
       return { success: true };
     }
