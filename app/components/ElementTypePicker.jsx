@@ -51,6 +51,7 @@ export const elementCategories = [
       { label: "Size chart", type: "size_chart", icon: "📏" },
       { label: "Tabs", type: "tabs", icon: "⊞" },
       { label: "Bundle", type: "bundle", icon: "📦" },
+      { label: "Variant Fetcher", type: "variant_fetcher", icon: "🔄" },
     ],
   },
 ];
@@ -92,6 +93,7 @@ export function getElementDescription(type) {
     "size_chart": "Size chart table.",
     "tabs": "Tabbed content sections.",
     "bundle": "Select multiple products to bundle.",
+    "variant_fetcher": "Fetch & display product variants.",
   };
   return descriptions[type] || "Custom field.";
 }
@@ -168,6 +170,8 @@ export function getDefaultConfig(type) {
       return { min: 0, max: 100, step: 1 };
     case "bundle":
       return { bundleProducts: [] };
+    case "variant_fetcher":
+      return { displayStyle: "button", hideOriginalSelectors: true };
     default:
       return {};
   }

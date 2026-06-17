@@ -62,6 +62,7 @@ const elementCategories = [
       { label: "Google Font Selector", icon: "Aa", description: "Font picker." },
       { label: "Tabs", icon: "⊞", description: "Tabbed content sections." },
       { label: "Bundle", icon: "📦", description: "Select multiple products to bundle." },
+      { label: "Variant Fetcher", icon: "🔄", description: "Fetch & display product variants." },
     ],
   },
 ];

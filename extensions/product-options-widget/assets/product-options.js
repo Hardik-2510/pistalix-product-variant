@@ -138,6 +138,8 @@ if (!window.pistalixSubmitTrackerRegistered) {
               if (inp.type === 'radio' && !inp.checked) return;
               if (inp.type === 'checkbox' && !inp.checked) return;
               if (inp.disabled) return;
+              var _grp = inp.closest('.cap-option-group');
+              if (_grp && _grp.style.display === 'none') return;
 
               if (inp.type === 'file') {
                 if (inp.files && inp.files.length > 0) {
@@ -163,6 +165,8 @@ if (!window.pistalixSubmitTrackerRegistered) {
                   if (inp.type === 'radio' && !inp.checked) return;
                   if (inp.type === 'checkbox' && !inp.checked) return;
                   if (inp.disabled) return;
+              var _grp = inp.closest('.cap-option-group');
+              if (_grp && _grp.style.display === 'none') return;
                   if (inp.value) {
                     var propMatch = inp.name.match(/properties\[(.*?)\]/);
                     if (propMatch && propMatch[1]) {
@@ -181,6 +185,8 @@ if (!window.pistalixSubmitTrackerRegistered) {
                   if (inp.type === 'radio' && !inp.checked) return;
                   if (inp.type === 'checkbox' && !inp.checked) return;
                   if (inp.disabled) return;
+              var _grp = inp.closest('.cap-option-group');
+              if (_grp && _grp.style.display === 'none') return;
                   if (inp.value) {
                     params.set(inp.name, inp.value);
                   }
@@ -247,6 +253,8 @@ if (!window.pistalixSubmitTrackerRegistered) {
                 if (inp.type === 'radio' && !inp.checked) return;
                 if (inp.type === 'checkbox' && !inp.checked) return;
                 if (inp.disabled) return;
+              var _grp = inp.closest('.cap-option-group');
+              if (_grp && _grp.style.display === 'none') return;
                 if (inp.value) {
                   var propMatch = inp.name.match(/properties\[(.*?)\]/);
                   if (propMatch && propMatch[1]) {
@@ -265,6 +273,8 @@ if (!window.pistalixSubmitTrackerRegistered) {
                 if (inp.type === 'radio' && !inp.checked) return;
                 if (inp.type === 'checkbox' && !inp.checked) return;
                 if (inp.disabled) return;
+              var _grp = inp.closest('.cap-option-group');
+              if (_grp && _grp.style.display === 'none') return;
                 if (inp.value) {
                   params.set(inp.name, inp.value);
                 }
@@ -678,9 +688,16 @@ function createGroup(element) {
     req.textContent = '*';
     labelWrap.appendChild(req);
   }
+
+  labelWrap.className = 'cap-label-wrap';
   group.appendChild(labelWrap);
 
   var config = typeof element.config === 'string' ? JSON.parse(element.config) : (element.config || {});
+  
+  if (config.hiddenLabel) {
+    labelWrap.style.display = 'none';
+  }
+
   var helpText = element.subtext || config.helpText;
 
   if (helpText) {
@@ -713,7 +730,8 @@ function createErrorMsg() {
 }
 
 function propName(label) {
-  return 'properties[' + label + ']';
+  var cleanLabel = label.replace(/:+$/, '').trim();
+  return 'properties[' + cleanLabel + ']';
 }
 
 /* ─── Render Template ────────────────────────────────────────── */
@@ -756,6 +774,7 @@ function renderTemplate(template, container) {
     else if (typeLower === 'bundle') elDOM = renderBundle(element);
     else if (typeLower === 'hidden field' || typeLower === 'hidden_field') elDOM = renderHiddenField(element);
     else if (typeLower === 'google font selector' || typeLower === 'font_picker') elDOM = renderFontPicker(element);
+    else if (typeLower === 'variant fetcher' || typeLower === 'variant_fetcher') elDOM = renderVariantFetcher(element);
     else elDOM = null;
 
     if (elDOM) {
@@ -830,7 +849,7 @@ function applyDynamicStyles(wrapper) {
 
   // General
   css += '.cap-options-wrapper { display: flex !important; flex-direction: row !important; flex-wrap: wrap !important; gap: 16px !important; margin: 0 !important; text-align: ' + alignment + ' !important; background-color: ' + (colors.appBackground || 'transparent') + ' !important; }\n';
-  css += '.cap-options-wrapper .cap-option-group { display: flex !important; flex-direction: column !important; box-sizing: border-box !important; padding: 0 !important; margin: 0 !important; flex-shrink: 0 !important; border: none !important; }\n';
+  css += '.cap-options-wrapper .cap-option-group { display: flex; flex-direction: column !important; box-sizing: border-box !important; padding: 0 !important; margin: 0 !important; flex-shrink: 0 !important; border: none !important; }\n';
   css += '.cap-options-wrapper .cap-option-group > * { order: 2; }\n';
   css += '.cap-options-wrapper .cap-label-wrap { order: 1; }\n';
   css += '.cap-options-wrapper .cap-help-text { order: 3; margin-top: 4px; }\n';
@@ -1134,6 +1153,8 @@ function injectIntoCartForm(wrapper, container) {
                 if (inp.type === 'radio' && !inp.checked) return;
                 if (inp.type === 'checkbox' && !inp.checked) return;
                 if (inp.disabled) return;
+              var _grp = inp.closest('.cap-option-group');
+              if (_grp && _grp.style.display === 'none') return;
                 if (inp.type === 'file') {
                   if (inp.files && inp.files.length > 0) {
                     if (inp.files.length === 1) {
@@ -1158,6 +1179,8 @@ function injectIntoCartForm(wrapper, container) {
                     if (inp.type === 'radio' && !inp.checked) return;
                     if (inp.type === 'checkbox' && !inp.checked) return;
                     if (inp.disabled) return;
+              var _grp = inp.closest('.cap-option-group');
+              if (_grp && _grp.style.display === 'none') return;
                     if (inp.value) {
                       var propMatch = inp.name.match(/properties\[(.*?)\]/);
                       if (propMatch && propMatch[1]) {
@@ -1176,6 +1199,8 @@ function injectIntoCartForm(wrapper, container) {
                     if (inp.type === 'radio' && !inp.checked) return;
                     if (inp.type === 'checkbox' && !inp.checked) return;
                     if (inp.disabled) return;
+              var _grp = inp.closest('.cap-option-group');
+              if (_grp && _grp.style.display === 'none') return;
                     if (inp.value) {
                       params.set(inp.name, inp.value);
                     }
@@ -1231,6 +1256,8 @@ function injectIntoCartForm(wrapper, container) {
               if (inp.type === 'radio' && !inp.checked) return;
               if (inp.type === 'checkbox' && !inp.checked) return;
               if (inp.disabled) return;
+              var _grp = inp.closest('.cap-option-group');
+              if (_grp && _grp.style.display === 'none') return;
               if (inp.type === 'file') {
                 if (inp.files && inp.files.length > 0) {
                   if (inp.files.length === 1) {
@@ -1255,6 +1282,8 @@ function injectIntoCartForm(wrapper, container) {
                   if (inp.type === 'radio' && !inp.checked) return;
                   if (inp.type === 'checkbox' && !inp.checked) return;
                   if (inp.disabled) return;
+              var _grp = inp.closest('.cap-option-group');
+              if (_grp && _grp.style.display === 'none') return;
                   if (inp.value) {
                     var propMatch = inp.name.match(/properties\[(.*?)\]/);
                     if (propMatch && propMatch[1]) {
@@ -1273,6 +1302,8 @@ function injectIntoCartForm(wrapper, container) {
                   if (inp.type === 'radio' && !inp.checked) return;
                   if (inp.type === 'checkbox' && !inp.checked) return;
                   if (inp.disabled) return;
+              var _grp = inp.closest('.cap-option-group');
+              if (_grp && _grp.style.display === 'none') return;
                   if (inp.value) {
                     params.set(inp.name, inp.value);
                   }
@@ -3191,10 +3222,13 @@ function evaluateStorefrontConditions() {
     var shouldShow = pullResult && pushResult;
 
     if (shouldShow) {
-      group.style.display = '';
+      if (group.style.display === 'none') {
+        var wType = (group._element && group._element.config && group._element.config.widthType) || '';
+        group.style.display = wType === 'Half width' ? 'inline-flex' : 'flex';
+      }
       enableGroupInputs(group, true);
     } else {
-      group.style.display = 'none';
+      group.style.setProperty('display', 'none', 'important');
       enableGroupInputs(group, false);
     }
   });
@@ -3390,12 +3424,22 @@ function initCartPageFeatures(toggleStates) {
           console.log("Pistalix Cart Mod:", { itemTitle: item.title, isAddon: isAddon, propsStr: propsStr });
 
           // In case the theme did output the properties, we hide them explicitly
-          var domProps = row.querySelectorAll('.product-details__item, .cart-item__details dl div, .cart-item__property, .item-property, dd, .cart-item__details-property');
+          var domProps = row.querySelectorAll('.product-details__item, .cart-item__details dl div, .cart-item__property, .item-property, dd, .cart-item__details-property, li, .product-option');
+          var skippedOpts = [];
+          if (item.properties && item.properties._skipped_options) {
+            skippedOpts = item.properties._skipped_options.split(',').map(function(s) { return s.trim(); });
+          }
+
           domProps.forEach(function (prop) {
             var text = prop.textContent || '';
             if (text.indexOf('_CustomOptions') > -1 || text.indexOf('_price_adjustments') > -1 || text.indexOf('_is_addon') > -1) {
               prop.style.display = 'none';
             }
+            skippedOpts.forEach(function (sk) {
+              if (text.indexOf(sk + ':') > -1 || text.indexOf(sk + ' :') > -1) {
+                prop.style.display = 'none';
+              }
+            });
           });
 
           // 1. Hide quantity box and remove button for add-on products
@@ -3573,6 +3617,389 @@ function renderFontPicker(element) {
     });
     group.appendChild(select);
   }
+
+  group.appendChild(createErrorMsg());
+  return group;
+}
+
+function renderVariantFetcher(element) {
+  var group = createGroup(element);
+  var config = parseConfig(element.config);
+  var displayStyle = config.displayStyle || 'button';
+  var hideOriginal = config.hideOriginalSelectors !== false;
+
+  // Loading indicator
+  var loadingEl = document.createElement('div');
+  loadingEl.textContent = 'Loading product variants...';
+  loadingEl.style.cssText = 'font-size:13px;color:#8c9196;padding:8px 0;';
+  group.appendChild(loadingEl);
+
+  // Detect product handle from the current page URL
+  var productHandle = '';
+  var pathParts = window.location.pathname.split('/');
+  for (var pi = 0; pi < pathParts.length; pi++) {
+    if (pathParts[pi] === 'products' && pathParts[pi + 1]) {
+      productHandle = pathParts[pi + 1].split('?')[0];
+      break;
+    }
+  }
+
+  if (!productHandle) {
+    loadingEl.textContent = 'Could not detect product. Variant Fetcher works only on product pages.';
+    loadingEl.style.color = '#d72c0d';
+    return group;
+  }
+
+  // Hidden input to store variant ID for the cart properties
+  var hiddenVariantInput = document.createElement('input');
+  hiddenVariantInput.type = 'hidden';
+  var cleanLabel = element.label.replace(/:+$/, '').trim();
+  var isHidden = config.hideVariantPropertiesInCart === true || config.hideVariantPropertiesInCart === 'true';
+  var propPrefix = isHidden ? 'properties[_' : 'properties[';
+  hiddenVariantInput.name = propPrefix + escapeHTML(cleanLabel) + ']';
+  hiddenVariantInput.className = 'cap-input-hidden';
+  group.appendChild(hiddenVariantInput);
+
+  fetch('/products/' + productHandle + '.js?v=' + Date.now())
+    .then(function (res) { return res.json(); })
+    .then(function (productData) {
+      loadingEl.remove();
+
+      var variants = productData.variants || [];
+      var options = productData.options || []; // [{name: "Size", position: 1, values: ["S","M","L"]}, ...]
+
+      if (variants.length === 0 || options.length === 0) {
+        var noVarMsg = document.createElement('p');
+        noVarMsg.textContent = 'No variants available for this product.';
+        noVarMsg.style.cssText = 'font-size:13px;color:#8c9196;margin:0;';
+        group.appendChild(noVarMsg);
+        return;
+      }
+
+      // State: track selected option value for each option position
+      var selectedOptions = {};
+      for (var oi = 0; oi < options.length; oi++) {
+        selectedOptions[oi] = null;
+      }
+
+      // Set defaults from the first available variant
+      var firstAvailable = null;
+      for (var fi = 0; fi < variants.length; fi++) {
+        if (variants[fi].available) { firstAvailable = variants[fi]; break; }
+      }
+      if (!firstAvailable) firstAvailable = variants[0];
+
+      for (var di = 0; di < options.length; di++) {
+        var isSkipped = false;
+        if (config.specificOptionName && config.specificOptionName.trim() !== '') {
+          if (options[di].name.toLowerCase() !== config.specificOptionName.trim().toLowerCase()) {
+            isSkipped = true;
+          }
+        }
+        if (config.noDefaultSelection && !isSkipped) {
+          selectedOptions[di] = null;
+        } else {
+          selectedOptions[di] = firstAvailable['option' + (di + 1)];
+        }
+      }
+  // Container for option groups
+      var optionsContainer = document.createElement('div');
+      optionsContainer.style.cssText = 'display:flex;flex-direction:column;gap:12px;';
+      group.appendChild(optionsContainer);
+
+      // Function to find matching variant from selected options
+      function findMatchingVariant() {
+        for (var vi = 0; vi < variants.length; vi++) {
+          var v = variants[vi];
+          var match = true;
+          for (var oki = 0; oki < options.length; oki++) {
+            if (v['option' + (oki + 1)] !== selectedOptions[oki]) {
+              match = false;
+              break;
+            }
+          }
+          if (match) return v;
+        }
+        return null;
+      }
+
+      // Function to check if a value for a specific option position is available
+      // given the other already-selected option values
+      function isOptionValueAvailable(optionIndex, testValue) {
+        for (var vi = 0; vi < variants.length; vi++) {
+          var v = variants[vi];
+          if (!v.available) continue;
+          if (v['option' + (optionIndex + 1)] !== testValue) continue;
+          // Check all other selected options match
+          var otherMatch = true;
+          for (var oki = 0; oki < options.length; oki++) {
+            if (oki === optionIndex) continue;
+            if (selectedOptions[oki] && v['option' + (oki + 1)] !== selectedOptions[oki]) {
+              otherMatch = false;
+              break;
+            }
+          }
+          if (otherMatch) return true;
+        }
+        return false;
+      }
+
+      // Function to update the main product form's variant ID
+      function updateProductFormVariantId(variant) {
+        var variantId = variant ? variant.id : '';
+        // Update the form's hidden input[name="id"] so the correct variant is added to cart
+        var forms = document.querySelectorAll('form[action*="/cart/add"], form.product-form, form[data-type="add-to-cart-form"]');
+        forms.forEach(function(form) {
+          var idInput = form.querySelector('input[name="id"], select[name="id"]');
+          if (idInput) {
+            idInput.value = variantId;
+            idInput.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+        });
+
+        // Also try the common <variant-radios> or <variant-selects> Shopify elements
+        var variantInputs = document.querySelectorAll('input[name="id"][type="hidden"]');
+        variantInputs.forEach(function(inp) {
+          // Only update ones inside product forms, not our own widget
+          if (!inp.closest('.cap-options-wrapper')) {
+            inp.value = variantId;
+          }
+        });
+      }
+
+      // Collect any options that are being skipped/hidden from the user
+      var skippedOptions = [];
+      if (config.specificOptionName && config.specificOptionName.trim() !== '') {
+        options.forEach(function(opt) {
+          if (opt.name.toLowerCase() !== config.specificOptionName.trim().toLowerCase()) {
+            skippedOptions.push(opt.name);
+          }
+        });
+      }
+      if (skippedOptions.length > 0) {
+        var skippedInput = document.createElement('input');
+        skippedInput.type = 'hidden';
+        skippedInput.name = 'properties[_skipped_options]';
+        skippedInput.value = skippedOptions.join(',');
+        skippedInput.className = 'cap-input-hidden';
+        group.appendChild(skippedInput);
+      }
+
+      // Update all option UI groups
+      function updateAllOptions() {
+        var matchedVariant = findMatchingVariant();
+
+        // Update hidden input with selected variant info
+        if (matchedVariant) {
+          hiddenVariantInput.value = matchedVariant.title;
+          capConfig.basePrice = matchedVariant.price;
+          updateProductFormVariantId(matchedVariant);
+        } else {
+          hiddenVariantInput.value = '';
+          updateProductFormVariantId(null);
+        }
+
+        // Update availability styling for each option group
+        for (var oi = 0; oi < options.length; oi++) {
+          var optGroup = optionsContainer.querySelector('[data-option-index="' + oi + '"]');
+          if (!optGroup) continue;
+
+          if (displayStyle === 'dropdown') {
+            var sel = optGroup.querySelector('select');
+            if (sel) {
+              var opts = sel.querySelectorAll('option');
+              for (var si = 0; si < opts.length; si++) {
+                if (opts[si].value === '') continue;
+                var avail = isOptionValueAvailable(oi, opts[si].value);
+                opts[si].disabled = !avail;
+                opts[si].textContent = opts[si].getAttribute('data-label') + (avail ? '' : ' (Unavailable)');
+              }
+            }
+          } else {
+            var btns = optGroup.querySelectorAll('.cap-vf-btn');
+            for (var bi = 0; bi < btns.length; bi++) {
+              var btnValue = btns[bi].getAttribute('data-value');
+              var isSelected = selectedOptions[oi] === btnValue;
+              var avail = isOptionValueAvailable(oi, btnValue);
+
+              btns[bi].style.border = isSelected ? '2px solid #1a1a1a' : '1px solid #e1e3e5';
+              btns[bi].style.background = isSelected ? '#1a1a1a' : '#fff';
+              btns[bi].style.color = isSelected ? '#fff' : '#1a1a1a';
+              btns[bi].style.opacity = avail ? '1' : '0.4';
+              btns[bi].style.textDecoration = avail ? 'none' : 'line-through';
+              btns[bi].style.cursor = avail ? 'pointer' : 'not-allowed';
+            }
+          }
+        }
+
+        hiddenVariantInput.dispatchEvent(new Event('change', { bubbles: true }));
+        hiddenVariantInput.dispatchEvent(new Event('input', { bubbles: true }));
+        updateTotalPrice();
+      }
+
+      // Render each option group
+      options.forEach(function (opt, optIdx) {
+        if (config.specificOptionName && config.specificOptionName.trim() !== '') {
+          if (opt.name.toLowerCase() !== config.specificOptionName.trim().toLowerCase()) {
+            return;
+          }
+        }
+
+        var optionGroup = document.createElement('div');
+        optionGroup.setAttribute('data-option-index', optIdx);
+        optionGroup.style.cssText = 'margin-bottom:4px;';
+
+        var optLabel = document.createElement('div');
+        optLabel.style.cssText = 'font-weight:600;font-size:14px;margin-bottom:6px;';
+        optLabel.textContent = opt.name;
+
+        // Show selected value next to label
+        var selectedValueSpan = document.createElement('span');
+        selectedValueSpan.style.cssText = 'font-weight:normal;color:#6d7175;margin-left:6px;';
+        selectedValueSpan.textContent = selectedOptions[optIdx] || '';
+        optLabel.appendChild(selectedValueSpan);
+
+        optionGroup.appendChild(optLabel);
+
+        if (displayStyle === 'dropdown') {
+          var select = document.createElement('select');
+          select.className = 'cap-input cap-select';
+          select.style.cssText = 'width:100%;padding:8px 12px;border:1px solid #e1e3e5;border-radius:4px;font-size:14px;';
+
+          var defaultOpt = document.createElement('option');
+          defaultOpt.value = '';
+          defaultOpt.textContent = 'Select ' + opt.name + '...';
+          select.appendChild(defaultOpt);
+
+          opt.values.forEach(function (val) {
+            var option = document.createElement('option');
+            option.value = val;
+            option.textContent = val;
+            option.setAttribute('data-label', val);
+            if (selectedOptions[optIdx] === val) option.selected = true;
+            select.appendChild(option);
+          });
+
+          select.addEventListener('change', function () {
+            selectedOptions[optIdx] = select.value || null;
+            selectedValueSpan.textContent = select.value || '';
+            
+            var exactMatch = findMatchingVariant();
+            if (!exactMatch || !exactMatch.available) {
+               for (var vi = 0; vi < variants.length; vi++) {
+                 if (variants[vi].available && variants[vi]['option' + (optIdx + 1)] === select.value) {
+                    for (var oki = 0; oki < options.length; oki++) {
+                       if (oki !== optIdx) {
+                          selectedOptions[oki] = variants[vi]['option' + (oki + 1)];
+                          var otherGroup = optionsContainer.querySelector('[data-option-index="' + oki + '"]');
+                          if (otherGroup) {
+                             var span = otherGroup.querySelector('span');
+                             if (span) span.textContent = selectedOptions[oki];
+                             if (displayStyle === 'dropdown') {
+                               var oSel = otherGroup.querySelector('select');
+                               if (oSel) oSel.value = selectedOptions[oki];
+                             }
+                          }
+                       }
+                    }
+                    break;
+                 }
+               }
+            }
+            updateAllOptions();
+          });
+
+          optionGroup.appendChild(select);
+        } else {
+          // Button swatches (default)
+          var btnWrap = document.createElement('div');
+          btnWrap.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;';
+
+          opt.values.forEach(function (val) {
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.textContent = val;
+            btn.className = 'cap-vf-btn';
+            btn.setAttribute('data-value', val);
+            var isSelected = selectedOptions[optIdx] === val;
+            btn.style.cssText = [
+              'padding:6px 16px',
+              'border-radius:4px',
+              'cursor:pointer',
+              'font-size:13px',
+              'font-weight:600',
+              'transition:all 0.15s ease',
+              'border:' + (isSelected ? '2px solid #1a1a1a' : '1px solid #e1e3e5'),
+              'background:' + (isSelected ? '#1a1a1a' : '#fff'),
+              'color:' + (isSelected ? '#fff' : '#1a1a1a'),
+            ].join(';');
+
+            btn.addEventListener('click', function () {
+              selectedOptions[optIdx] = val;
+              selectedValueSpan.textContent = val;
+              
+              var exactMatch = findMatchingVariant();
+              if (!exactMatch || !exactMatch.available) {
+                 for (var vi = 0; vi < variants.length; vi++) {
+                   if (variants[vi].available && variants[vi]['option' + (optIdx + 1)] === val) {
+                      for (var oki = 0; oki < options.length; oki++) {
+                         if (oki !== optIdx) {
+                            selectedOptions[oki] = variants[vi]['option' + (oki + 1)];
+                            var otherGroup = optionsContainer.querySelector('[data-option-index="' + oki + '"]');
+                            if (otherGroup) {
+                               var span = otherGroup.querySelector('span');
+                               if (span) span.textContent = selectedOptions[oki];
+                            }
+                         }
+                      }
+                      break;
+                   }
+                 }
+              }
+              updateAllOptions();
+            });
+
+            btnWrap.appendChild(btn);
+          });
+
+          optionGroup.appendChild(btnWrap);
+        }
+
+        optionsContainer.appendChild(optionGroup);
+      });
+
+      // Initial availability check
+      updateAllOptions();
+
+      // Hide original variant selectors if config says so
+      if (hideOriginal) {
+        var selectorsToHide = [
+          'variant-radios',
+          'variant-selects',
+          '.product-form__input--variant',
+          '.product-form__variants',
+          'fieldset.product-form__input',
+          '.swatch',
+          '[data-option-index]',
+        ];
+        // Small delay to ensure theme elements have rendered
+        setTimeout(function () {
+          selectorsToHide.forEach(function (sel) {
+            var els = document.querySelectorAll(sel);
+            els.forEach(function (el) {
+              // Don't hide our own elements
+              if (el.closest('.cap-options-wrapper')) return;
+              el.style.setProperty('display', 'none', 'important');
+            });
+          });
+        }, 200);
+      }
+    })
+    .catch(function (err) {
+      loadingEl.textContent = 'Could not load product variants.';
+      loadingEl.style.color = '#d72c0d';
+      console.error('Pistalix Variant Fetcher error:', err);
+    });
 
   group.appendChild(createErrorMsg());
   return group;

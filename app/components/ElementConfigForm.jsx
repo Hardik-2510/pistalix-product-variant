@@ -525,6 +525,30 @@ export default function ElementConfigForm({ element, updateField, updateConfig }
           )}
         </BlockStack>
       )}
+
+      {(typeStr === "variant_fetcher" || element.type === "Variant Fetcher") && (
+        <BlockStack gap="300">
+          <Box padding="300" background="bg-surface-info" borderRadius="200">
+            <Text as="p" variant="bodySm" tone="info">
+              🔄 This element will automatically fetch and display the options (like Size, Color) of the product this template is assigned to. No product selection is needed.
+            </Text>
+          </Box>
+          <Select
+            label="Display style"
+            options={[
+              { label: "Button swatches", value: "button" },
+              { label: "Dropdown", value: "dropdown" },
+            ]}
+            value={config.displayStyle || "button"}
+            onChange={(v) => updateConfig("displayStyle", v)}
+          />
+          <Checkbox
+            label="Hide original variant selectors on the product page"
+            checked={config.hideOriginalSelectors !== false}
+            onChange={(v) => updateConfig("hideOriginalSelectors", v)}
+          />
+        </BlockStack>
+      )}
     </BlockStack>
   );
 }

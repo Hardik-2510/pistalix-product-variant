@@ -1219,6 +1219,57 @@ export default function ElementRenderer({ element, value, onChange }) {
       );
     }
 
+    case "variant_fetcher": {
+      const mockOptions = [
+        { name: "Size", values: ["S", "M", "L", "XL"], unavailable: ["XL"] },
+        { name: "Color", values: ["Red", "Blue", "Green"], unavailable: ["Green"] },
+      ];
+      return (
+        <Box>
+          <Text as="p" variant="bodySm" fontWeight="semibold" paddingBlockEnd="200">{label}</Text>
+          <Box padding="300" background="bg-surface-secondary" borderWidth="025" borderColor="border" borderRadius="200">
+            <BlockStack gap="300">
+              <InlineStack gap="100" blockAlign="center">
+                <Text as="span" variant="bodySm" tone="magic">🔄</Text>
+                <Text as="span" variant="bodySm" tone="subdued">
+                  Variants will be fetched from the assigned product
+                </Text>
+              </InlineStack>
+              {mockOptions.map((opt, oi) => (
+                <BlockStack key={oi} gap="100">
+                  <Text as="p" variant="bodySm" fontWeight="semibold">{opt.name}</Text>
+                  <InlineStack gap="200" wrap>
+                    {opt.values.map((val, vi) => {
+                      const isUnavail = opt.unavailable.includes(val);
+                      return (
+                        <div
+                          key={vi}
+                          style={{
+                            padding: "6px 16px",
+                            borderRadius: "4px",
+                            border: vi === 0 ? "2px solid #1a1a1a" : "1px solid var(--p-color-border)",
+                            backgroundColor: vi === 0 ? "#1a1a1a" : "#fff",
+                            color: vi === 0 ? "#fff" : "#1a1a1a",
+                            fontSize: "13px",
+                            fontWeight: "600",
+                            opacity: isUnavail ? 0.4 : 1,
+                            textDecoration: isUnavail ? "line-through" : "none",
+                            cursor: isUnavail ? "not-allowed" : "pointer",
+                          }}
+                        >
+                          {val}
+                        </div>
+                      );
+                    })}
+                  </InlineStack>
+                </BlockStack>
+              ))}
+            </BlockStack>
+          </Box>
+        </Box>
+      );
+    }
+
     default:
       return (
         <TextField

@@ -745,6 +745,52 @@ export default function ElementEditor({ element, allElements = [], onChange, onB
                 </Box>
               )}
 
+              {/* Variant Fetcher Settings */}
+              {(element.type === "Variant Fetcher" || element.type === "variant_fetcher") && (
+                <Box paddingBlockStart="400" paddingBlockEnd="400">
+                  <BlockStack gap="400">
+                    <Text variant="headingSm" as="h3">Variant Fetcher Settings</Text>
+                    <Banner tone="info">
+                      <p>This element will automatically fetch and display the options (like Size, Color) of the product this template is assigned to. No product selection is needed — variants are detected from the product page.</p>
+                    </Banner>
+                    <Select
+                      label="Display style"
+                      options={[
+                        { label: "Button swatches", value: "button" },
+                        { label: "Dropdown", value: "dropdown" },
+                      ]}
+                      value={element.config?.displayStyle || "button"}
+                      onChange={(val) => handleConfigChange("displayStyle", val)}
+                    />
+                    <Checkbox
+                      label="Hide original variant selectors on the product page"
+                      checked={element.config?.hideOriginalSelectors !== false}
+                      onChange={(val) => handleConfigChange("hideOriginalSelectors", val)}
+                      helpText="When enabled, the theme's native variant selectors (size, color pickers) will be hidden to prevent duplicates"
+                    />
+                    <Checkbox
+                      label="Hide variant properties in cart"
+                      checked={element.config?.hideVariantPropertiesInCart || false}
+                      onChange={(val) => handleConfigChange("hideVariantPropertiesInCart", val)}
+                      helpText="When enabled, the selected variant options won't be shown as separate line item properties in the cart."
+                    />
+                    <TextField
+                      label="Specific option to fetch (Optional)"
+                      value={element.config?.specificOptionName || ""}
+                      onChange={(val) => handleConfigChange("specificOptionName", val)}
+                      helpText="Enter the exact name of the option to fetch (e.g., 'Size'). If empty, all options will be fetched."
+                      autoComplete="off"
+                    />
+                    <Checkbox
+                      label="Do not pre-select any option"
+                      checked={element.config?.noDefaultSelection || false}
+                      onChange={(val) => handleConfigChange("noDefaultSelection", val)}
+                      helpText="When enabled, the customer will be forced to select an option before they can add to cart."
+                    />
+                  </BlockStack>
+                </Box>
+              )}
+
               <Box paddingBlockStart="400">
                 <BlockStack gap="400">
                   <Text variant="headingSm" as="h3">Advanced Features (Unlocked)</Text>
