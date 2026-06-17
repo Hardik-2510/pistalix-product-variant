@@ -321,7 +321,15 @@ export default function ElementConfigForm({ element, updateField, updateConfig }
 
       {(typeStr === "paragraph" || element.type === "Paragraph") && (
         <BlockStack gap="300">
-          <TextField label="Content" value={config.content || ""} onChange={(v) => updateConfig("content", v)} multiline={3} />
+          <Box>
+            <InlineStack align="space-between">
+              <Text variant="headingSm" as="h6">Content</Text>
+            </InlineStack>
+            <ClientRichTextEditor 
+              value={config.content || ""} 
+              onChange={(v) => updateConfig("content", v)} 
+            />
+          </Box>
           <Select label="Align" options={["left", "center", "right", "justify"]} value={config.align || "left"} onChange={(v) => updateConfig("align", v)} />
         </BlockStack>
       )}

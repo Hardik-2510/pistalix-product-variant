@@ -19,7 +19,22 @@ export default function ElementRenderer({ element, value, onChange }) {
   const togglePopoverActive = () => setPopoverActive((v) => !v);
 
   // Normalizing options to support both ElementEditor (choices) and legacy formats (options/swatches)
-  const optionsList = config.choices || config.options || config.swatches || [];
+  const rawOptionsList = config.choices || config.options || config.swatches || [];
+  const optionsList = rawOptionsList.map((opt) => {
+    let newOpt = { ...opt };
+    if (config.textTransform && config.textTransform !== "Default") {
+      const transformText = (text) => {
+        if (!text) return text;
+        if (config.textTransform === "Uppercase") return text.toUpperCase();
+        if (config.textTransform === "Lowercase") return text.toLowerCase();
+        if (config.textTransform === "Capitalize") return text.replace(/\b\w/g, (c) => c.toUpperCase());
+        return text;
+      };
+      if (newOpt.label) newOpt.label = transformText(newOpt.label);
+      if (newOpt.value) newOpt.value = transformText(newOpt.value);
+    }
+    return newOpt;
+  });
 
   const getDefaultValue = () => {
     if (value !== undefined && value !== null) return value;
@@ -71,7 +86,7 @@ export default function ElementRenderer({ element, value, onChange }) {
     if (!p) return "";
     
     // Clean up any existing + or $ that the user might have typed
-    p = p.replace(/[+$]/g, "").trim();
+    p = String(p).replace(/[+$]/g, "").trim();
     if (!p) return "";
     
     return ` (+${p}$)`;
@@ -79,23 +94,58 @@ export default function ElementRenderer({ element, value, onChange }) {
 
   const getScrollStyle = () => {
     if (!["radio button", "checkbox", "button", "color swatch", "image swatch"].includes(typeStr)) return {};
+    
+    const isHorizontal = config.directionStyle === "horizontal";
+    
     if (config.scrollType === "By fixed height" && config.scrollHeight) {
-      return { maxHeight: `${config.scrollHeight}px`, overflowY: 'auto', overflowX: 'hidden', paddingRight: '8px' };
+      if (isHorizontal) {
+        return { maxWidth: `${config.scrollHeight}px`, overflowX: 'auto', overflowY: 'hidden', paddingBottom: '8px' };
+      } else {
+        return { maxHeight: `${config.scrollHeight}px`, overflowY: 'auto', overflowX: 'hidden', paddingRight: '8px' };
+      }
     }
+    
     if (config.scrollType === "By number of option values" && config.scrollVisibleItems) {
       const n = parseInt(config.scrollVisibleItems) || 3;
       const isVertical = config.directionStyle === "vertical";
       const gap = (typeStr === "image swatch" && isVertical) ? 12 : 8;
       
-      let itemHeight = 20; 
-      if (typeStr === "image swatch") itemHeight = parseInt(config.swatchHeight || 50);
-      else if (typeStr === "color swatch" || typeStr === "button") itemHeight = 36;
-      else itemHeight = 24; // radio/checkbox
+      let itemSize = 20; 
+      if (typeStr === "image swatch") itemSize = parseInt(isHorizontal ? (config.swatchWidth || 50) : (config.swatchHeight || 50));
+      else if (typeStr === "color swatch") itemSize = parseInt(isHorizontal ? (config.swatchWidth || 36) : (config.swatchHeight || 36));
+      else if (typeStr === "button") itemSize = isHorizontal ? parseInt(config.swatchWidth || 100) : parseInt(config.swatchHeight || 36);
+      else itemSize = isHorizontal ? 100 : 24; // radio/checkbox approx width 100
       
-      const totalHeight = (itemHeight * n) + (gap * (Math.max(0, n - 1)));
-      return { maxHeight: `${totalHeight}px`, overflowY: 'auto', overflowX: 'hidden', paddingRight: '8px' };
+      const totalSize = (itemSize * n) + (gap * (Math.max(0, n - 1)));
+      if (isHorizontal) {
+        return { maxWidth: `${totalSize}px`, overflowX: 'auto', overflowY: 'hidden', paddingBottom: '8px' };
+      } else {
+        return { maxHeight: `${totalSize}px`, overflowY: 'auto', overflowX: 'hidden', paddingRight: '8px' };
+      }
     }
     return {};
+  };
+
+  const renderLabelContent = (addonOverride) => {
+    const textLabel = `${label}${addonOverride !== undefined ? addonOverride : getAddOnText(config)}`;
+    if (config.helpText && config.helpTextPosition === "Tooltip") {
+      return (
+        <InlineStack gap="100" blockAlign="center">
+          <Text as="span" variant="bodySm" fontWeight="semibold">{textLabel}</Text>
+          <Tooltip content={config.helpText}>
+            <Text as="span" tone="subdued" cursor="help">ⓘ</Text>
+          </Tooltip>
+        </InlineStack>
+      );
+    }
+    return <Text as="span" variant="bodySm" fontWeight="semibold">{textLabel}</Text>;
+  };
+
+  const renderHelpText = () => {
+    if (config.helpText && config.helpTextPosition !== "Tooltip") {
+      return <Box paddingBlockStart="100"><Text as="p" tone="subdued" variant="bodySm">{config.helpText}</Text></Box>;
+    }
+    return null;
   };
 
   switch (typeStr) {
@@ -141,7 +191,7 @@ export default function ElementRenderer({ element, value, onChange }) {
         
         return (
           <Box>
-            <Text as="p" variant="bodySm" fontWeight="semibold" paddingBlockEnd="100">{label}{getAddOnText(config)}</Text>
+            <Box paddingBlockEnd="100">{renderLabelContent()}</Box>
             <input 
               type={isTimeEnabled ? "datetime-local" : "date"}
               defaultValue={value || ""}
@@ -154,7 +204,7 @@ export default function ElementRenderer({ element, value, onChange }) {
                 boxSizing: "border-box"
               }}
             />
-            {config.helpText && <Text as="p" tone="subdued" variant="bodySm"><Box paddingBlockStart="100">{config.helpText}</Box></Text>}
+            {renderHelpText()}
           </Box>
         );
       }
@@ -166,25 +216,10 @@ export default function ElementRenderer({ element, value, onChange }) {
       const charCountText = maxL ? `${currentLength}/${maxL} characters` : `${currentLength} characters`;
 
 
-      const renderLabel = () => {
-        const textLabel = `${label}${getAddOnText(config)}`;
-        if (config.helpText && config.helpTextPosition === "Tooltip") {
-          return (
-            <InlineStack gap="100" blockAlign="center">
-              <Text as="span">{textLabel}</Text>
-              <Tooltip content={config.helpText}>
-                <Text as="span" tone="subdued" cursor="help">ⓘ</Text>
-              </Tooltip>
-            </InlineStack>
-          );
-        }
-        return textLabel;
-      };
-
       return (
         <Box>
           <TextField
-            label={renderLabel()}
+            label={renderLabelContent()}
             type={typeStr === "number" ? "number" : typeStr === "email" ? "email" : typeStr === "phone" ? "tel" : "text"}
             placeholder={config.placeholder || ""}
             value={value || ""}
@@ -212,25 +247,10 @@ export default function ElementRenderer({ element, value, onChange }) {
       const showCount = config.characterCounter || maxL;
       const charCountText = maxL ? `${currentLength}/${maxL} characters` : `${currentLength} characters`;
 
-      const renderLabel = () => {
-        const textLabel = `${label}${getAddOnText(config)}`;
-        if (config.helpText && config.helpTextPosition === "Tooltip") {
-          return (
-            <InlineStack gap="100" blockAlign="center">
-              <Text as="span">{textLabel}</Text>
-              <Tooltip content={config.helpText}>
-                <Text as="span" tone="subdued" cursor="help">ⓘ</Text>
-              </Tooltip>
-            </InlineStack>
-          );
-        }
-        return textLabel;
-      };
-
       return (
         <Box>
           <TextField
-            label={renderLabel()}
+            label={renderLabelContent()}
             placeholder={config.placeholder || ""}
             value={value || ""}
             onChange={handleTextChange}
@@ -254,9 +274,9 @@ export default function ElementRenderer({ element, value, onChange }) {
 
       return (
         <Box>
-          <Text as="p" variant="bodySm" fontWeight="semibold">{label} {addonText}</Text>
+          <Box paddingBlockEnd="100">{renderLabelContent(` ${addonText}`)}</Box>
           {selectedOption && (
-             <Text as="p" variant="bodySm" tone="subdued" paddingBlockStart="050" paddingBlockEnd="100">
+             <Text as="p" variant="bodySm" tone="subdued" paddingBlockEnd="100">
                 {selectedOption.label || selectedOption.value || ""}
              </Text>
           )}
@@ -271,6 +291,7 @@ export default function ElementRenderer({ element, value, onChange }) {
             value={activeValue || ""}
             onChange={handleSelectChange}
           />
+          {renderHelpText()}
         </Box>
       );
     }
@@ -289,11 +310,15 @@ export default function ElementRenderer({ element, value, onChange }) {
         </Button>
       );
       
+      const previewW = parseInt(config.swatchWidth || 50);
+      const previewH = parseInt(config.swatchHeight || 50);
+      const previewRadius = config.swatchShape === "Square" ? "4px" : "50%";
+      
       return (
         <Box>
-           <Text as="p" variant="bodySm" fontWeight="semibold">{label} {addonText}</Text>
+           <Box paddingBlockEnd="100">{renderLabelContent(` ${addonText}`)}</Box>
            {selectedOption && (
-              <Text as="p" variant="bodySm" tone="subdued" paddingBlockStart="050" paddingBlockEnd="100">
+              <Text as="p" variant="bodySm" tone="subdued" paddingBlockEnd="100">
                  {selectedOption.label || selectedOption.value || ""}
               </Text>
            )}
@@ -301,8 +326,8 @@ export default function ElementRenderer({ element, value, onChange }) {
            
            <InlineStack gap="300" blockAlign="center" wrap={false}>
              {selectedOption?.image && (
-               <Box minWidth="50px">
-                 <img src={selectedOption.image} alt="" style={{width: 50, height: 50, objectFit: "cover", borderRadius: "50%", border: "1px solid var(--p-color-border-disabled)"}} />
+               <Box minWidth={`${previewW}px`}>
+                 <img src={selectedOption.image} alt="" style={{width: previewW, height: previewH, objectFit: "cover", borderRadius: previewRadius, border: "1px solid var(--p-color-border-disabled)"}} />
                </Box>
              )}
              <Box width="100%">
@@ -327,7 +352,7 @@ export default function ElementRenderer({ element, value, onChange }) {
              </Box>
            </InlineStack>
            
-           {config.helpText && <Text as="p" tone="subdued" variant="bodySm"><Box paddingBlockStart="100">{config.helpText}</Box></Text>}
+           {renderHelpText()}
         </Box>
       );
     }
@@ -340,32 +365,39 @@ export default function ElementRenderer({ element, value, onChange }) {
         ? `${selectedOption.label || selectedOption.color || selectedOption.value}`
         : `Select ${label}...`;
         
+      const previewW = parseInt(config.swatchWidth || 50);
+      const previewH = parseInt(config.swatchHeight || 50);
+      const previewRadius = config.swatchShape === "Square" ? "4px" : "50%";
+
       const activator = (
         <Button onClick={togglePopoverActive} disclosure fullWidth textAlign="left">
-          <InlineStack gap="200" blockAlign="center">
-             {selectedOption && (
-                <div style={{width: 20, height: 20, backgroundColor: selectedOption.color || "#000", borderRadius: 4, border: "1px solid var(--p-color-border)"}} />
-             )}
-             <span>{buttonLabel}</span>
-          </InlineStack>
+          <span>{buttonLabel}</span>
         </Button>
       );
       
       return (
         <Box>
-           <Text as="p" variant="bodySm" fontWeight="semibold">{label} {addonText}</Text>
+           <Box paddingBlockEnd="100">{renderLabelContent(` ${addonText}`)}</Box>
            {selectedOption && (
-              <Text as="p" variant="bodySm" tone="subdued" paddingBlockStart="050" paddingBlockEnd="100">
+              <Text as="p" variant="bodySm" tone="subdued" paddingBlockEnd="100">
                  {selectedOption.label || selectedOption.value || ""}
               </Text>
            )}
            {!selectedOption && <Box paddingBlockEnd="100" />}
-           <Popover
-             active={popoverActive}
-             activator={activator}
-             onClose={() => setPopoverActive(false)}
-             fullWidth
-           >
+           
+           <InlineStack gap="300" blockAlign="center" wrap={false}>
+             {selectedOption && (
+               <Box minWidth={`${previewW}px`}>
+                 <div style={{width: previewW, height: previewH, backgroundColor: selectedOption.color || "#000", borderRadius: previewRadius, border: "1px solid var(--p-color-border)"}} />
+               </Box>
+             )}
+             <Box width="100%">
+               <Popover
+                 active={popoverActive}
+                 activator={activator}
+                 onClose={() => setPopoverActive(false)}
+                 fullWidth
+               >
              <ActionList
                actionRole="menuitem"
                items={optionsList.map((o, i) => {
@@ -373,12 +405,14 @@ export default function ElementRenderer({ element, value, onChange }) {
                  return {
                    content: `${o.label || o.color || o.value}${getAddOnText(o)}`,
                    onAction: () => { handleSelectChange(val); setPopoverActive(false); },
-                   prefix: <div style={{width: 20, height: 20, backgroundColor: o.color || "#000", borderRadius: 4, border: "1px solid var(--p-color-border)"}} />
+                   prefix: <div style={{width: previewW, height: previewH, backgroundColor: o.color || "#000", borderRadius: previewRadius, border: "1px solid var(--p-color-border)"}} />
                  };
                })}
              />
            </Popover>
-           {config.helpText && <Text as="p" tone="subdued" variant="bodySm"><Box paddingBlockStart="100">{config.helpText}</Box></Text>}
+           </Box>
+           </InlineStack>
+           {renderHelpText()}
         </Box>
       );
     }
@@ -386,8 +420,8 @@ export default function ElementRenderer({ element, value, onChange }) {
     case "radio button": {
       return (
         <Box>
-          <Text as="p" variant="bodySm" fontWeight="semibold">{label}</Text>
-          <Box paddingBlockStart="200">
+          <Box paddingBlockEnd="100">{renderLabelContent()}</Box>
+          <Box>
             <div style={getScrollStyle()}>
               <BlockStack gap="100">
                 {optionsList.map((o, i) => {
@@ -404,6 +438,7 @@ export default function ElementRenderer({ element, value, onChange }) {
               </BlockStack>
             </div>
           </Box>
+          {renderHelpText()}
         </Box>
       );
     }
@@ -413,8 +448,8 @@ export default function ElementRenderer({ element, value, onChange }) {
       const currentValues = Array.isArray(activeValue) ? activeValue : (activeValue ? [activeValue] : []);
       return (
         <Box>
-          <Text as="p" variant="bodySm" fontWeight="semibold">{label}</Text>
-          <Box paddingBlockStart="200">
+          <Box paddingBlockEnd="100">{renderLabelContent()}</Box>
+          <Box>
             {typeStr === "select" ? (
               <BlockStack gap="100">
                 {optionsList.map((o, i) => {
@@ -453,6 +488,7 @@ export default function ElementRenderer({ element, value, onChange }) {
               </div>
             )}
           </Box>
+          {renderHelpText()}
         </Box>
       );
     }
@@ -466,26 +502,27 @@ export default function ElementRenderer({ element, value, onChange }) {
         : (Array.isArray(activeValue) ? [activeValue[0]] : [activeValue]);
 
       const selectedSwatches = optionsList.filter((s, i) => currentValues.includes(s.id || s.value || s.label || String(i)));
+      const swatchBorderRadius = config.swatchShape === "Square" ? "4px" : "50%";
       
       return (
         <Box>
-          <Text as="p" variant="bodySm" fontWeight="semibold">
-            {label}
+          <Box paddingBlockEnd="100">
+            {renderLabelContent()}
             {selectedSwatches.length > 0 && (
               <span style={{ fontWeight: "normal", color: "var(--p-color-text-subdued)", marginLeft: "8px" }}>
                 {selectedSwatches.map(s => `${s.label} ${getAddOnText(s)}`).join(", ")}
               </span>
             )}
-          </Text>
-          <Box paddingBlockStart="200">
-            <div style={{ ...getScrollStyle(), display: 'flex', flexDirection: typeStr === "image swatch" && config.directionStyle === "vertical" ? 'column' : 'row', gap: typeStr === "image swatch" && config.directionStyle === "vertical" ? '12px' : '8px', flexWrap: typeStr === "image swatch" && config.directionStyle === "vertical" ? 'nowrap' : 'wrap' }}>
+          </Box>
+          <Box>
+            <div style={{ ...getScrollStyle(), display: 'flex', flexDirection: config.directionStyle === "vertical" ? 'column' : 'row', gap: config.directionStyle === "vertical" ? '12px' : '8px', flexWrap: (config.directionStyle === "horizontal" && config.scrollType && config.scrollType !== "Default") ? 'nowrap' : (config.directionStyle === "vertical" ? 'nowrap' : 'wrap') }}>
               {optionsList.map((s, i) => {
                 const optValue = s.id || s.value || s.label || String(i);
                 const isSelected = currentValues.includes(optValue);
                 
                 if (typeStr === "color swatch") {
-                  return (
-                    <Tooltip key={i} content={`${s.label}${getAddOnText(s)}`} preferredPosition="above">
+                  const isVertical = config.directionStyle === "vertical";
+                  const swatchDiv = (
                       <div
                         onClick={() => {
                           if (isMulti) {
@@ -509,7 +546,9 @@ export default function ElementRenderer({ element, value, onChange }) {
                         role="button"
                         tabIndex={0}
                         style={{
-                          width: "36px", height: "36px", borderRadius: "50%",
+                          width: config.swatchWidth ? `${config.swatchWidth}px` : "36px", 
+                          height: config.swatchHeight ? `${config.swatchHeight}px` : "36px", 
+                          borderRadius: swatchBorderRadius,
                           backgroundColor: s.color || "#ffffff",
                           border: isSelected ? "3px solid var(--p-color-border-brand)" : "2px solid var(--p-color-border)",
                           cursor: "pointer",
@@ -523,7 +562,16 @@ export default function ElementRenderer({ element, value, onChange }) {
                           </div>
                         )}
                       </div>
-                    </Tooltip>
+                  );
+                  return (
+                    <div key={i} style={{ display: isVertical ? 'flex' : 'block', width: isVertical ? '100%' : 'auto', alignItems: 'center', gap: '12px' }}>
+                      <Tooltip content={`${s.label}${getAddOnText(s)}`} preferredPosition="above">
+                        {swatchDiv}
+                      </Tooltip>
+                      {isVertical && (
+                        <Text as="span" variant="bodyMd">{s.label}{getAddOnText(s)}</Text>
+                      )}
+                    </div>
                   );
                 }
 
@@ -554,7 +602,7 @@ export default function ElementRenderer({ element, value, onChange }) {
                         tabIndex={0}
                         style={{
                           width: `${config.swatchWidth || 50}px`, height: `${config.swatchHeight || 50}px`,
-                          borderRadius: "4px",
+                          borderRadius: swatchBorderRadius,
                           border: isSelected ? "2px solid var(--p-color-border-brand)" : "1px solid var(--p-color-border)",
                           cursor: "pointer",
                           padding: "2px",
@@ -588,10 +636,8 @@ export default function ElementRenderer({ element, value, onChange }) {
                   );
                 }
                 return (
-                  <Button 
-                    key={i} 
-                    size="slim" 
-                    pressed={isSelected}
+                  <div
+                    key={i}
                     onClick={() => {
                       if (isMulti) {
                         if (isSelected) handleChoiceChange(currentValues.filter(v => v !== optValue));
@@ -600,13 +646,44 @@ export default function ElementRenderer({ element, value, onChange }) {
                         handleChoiceChange(optValue);
                       }
                     }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        if (isMulti) {
+                          if (isSelected) handleChoiceChange(currentValues.filter(v => v !== optValue));
+                          else handleChoiceChange([...currentValues, optValue]);
+                        } else {
+                          handleChoiceChange(optValue);
+                        }
+                      }
+                    }}
+                    role="button"
+                    tabIndex={0}
+                    style={{
+                      width: config.swatchWidth ? `${config.swatchWidth}px` : "auto",
+                      height: config.swatchHeight ? `${config.swatchHeight}px` : "36px",
+                      padding: config.swatchWidth ? "0" : "0 16px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      borderRadius: config.swatchShape === "Round" ? "50px" : "4px",
+                      border: isSelected ? "2px solid var(--p-color-border-brand)" : "1px solid var(--p-color-border)",
+                      backgroundColor: isSelected ? "var(--p-color-bg-surface-brand)" : "#ffffff",
+                      color: isSelected ? "var(--p-color-text-brand-on-bg-fill)" : "var(--p-color-text)",
+                      cursor: "pointer",
+                      boxSizing: "border-box",
+                      fontWeight: "500",
+                      fontSize: "14px",
+                      textAlign: "center"
+                    }}
                   >
                     {s.label}{getAddOnText(s)}
-                  </Button>
+                  </div>
                 );
               })}
             </div>
           </Box>
+          {renderHelpText()}
         </Box>
       );
     }
@@ -627,7 +704,7 @@ export default function ElementRenderer({ element, value, onChange }) {
     case "spacing":
       return <Box minHeight={`${config.height || 20}px`} />;
     case "paragraph":
-      return <Text as="p" tone="subdued">{config.content || label}</Text>;
+      return <div style={{ textAlign: config.align || "left", color: "var(--p-color-text-subdued)" }} dangerouslySetInnerHTML={{ __html: config.content || label }} />;
     case "html":
       return <div dangerouslySetInnerHTML={{ __html: config.content || "<div></div>" }} />;
     case "popup_modal":
@@ -650,7 +727,9 @@ export default function ElementRenderer({ element, value, onChange }) {
               <div 
                 style={{
                   background: 'white', borderRadius: '8px', padding: '24px',
-                  maxWidth: `${config.modalWidth || 560}px`, width: '90%',
+                  maxWidth: !config.modalWidth ? '90vw' : (String(config.modalWidth).includes('px') || String(config.modalWidth).includes('%') || String(config.modalWidth) === 'auto' ? config.modalWidth : `${config.modalWidth}px`), 
+                  width: !config.modalWidth ? 'fit-content' : '90%',
+                  height: !config.modalHeight ? 'auto' : (String(config.modalHeight).includes('px') || String(config.modalHeight).includes('%') || String(config.modalHeight) === 'auto' ? config.modalHeight : `${config.modalHeight}px`),
                   maxHeight: '80vh', overflowY: 'auto', position: 'relative',
                   boxShadow: '0 20px 60px rgba(0,0,0,0.3)', color: '#111827'
                 }}
@@ -697,7 +776,7 @@ export default function ElementRenderer({ element, value, onChange }) {
             </div>
             <Text as="p">{value === "true" ? (config.labelOn || "ON") : (config.labelOff || "OFF")}</Text>
           </InlineStack>
-          {config.helpText && <Text as="p" tone="subdued" variant="bodySm"><Box paddingBlockStart="100">{config.helpText}</Box></Text>}
+          {config.helpText && <Box paddingBlockStart="100"><Text as="p" tone="subdued" variant="bodySm">{config.helpText}</Text></Box>}
         </Box>
       );
       
@@ -762,7 +841,7 @@ export default function ElementRenderer({ element, value, onChange }) {
 
       return (
         <Box>
-          <Text as="p" variant="bodySm" fontWeight="semibold" paddingBlockEnd="100">{label}{getAddOnText(config)}</Text>
+          <Box paddingBlockEnd="100">{renderLabelContent()}</Box>
           
           {isFileUploaded || fileName ? (
             <div style={{
@@ -865,7 +944,7 @@ export default function ElementRenderer({ element, value, onChange }) {
           <Box paddingBlockStart="200">
              <Text as="p" tone="subdued" variant="bodyMd">(Allowed extension: {allowedExts})</Text>
           </Box>
-          {config.helpText && <Box paddingBlockStart="100"><Text as="p" tone="subdued" variant="bodySm">{config.helpText}</Text></Box>}
+          {renderHelpText()}
           
           <style dangerouslySetInnerHTML={{__html: `
             @keyframes fadeInUpload {
@@ -904,6 +983,10 @@ export default function ElementRenderer({ element, value, onChange }) {
       const fonts = config.fonts || ["Marko One", "Enriqueta", "Grand Hotel", "Itim", "Ledger", "Modern Antiqua", "Noto Serif TC", "Pirata One", "Poppins"];
       const selectedFont = fonts.find(f => f === activeValue) || activeValue || "";
       
+      const fontStyles = (
+        <style dangerouslySetInnerHTML={{ __html: fonts.map(f => `@import url('https://fonts.googleapis.com/css2?family=${f.replace(/ /g, '+')}&display=swap');`).join('\n') }} />
+      );
+      
       const activator = (
         <div 
           onClick={togglePopoverActive}
@@ -935,8 +1018,42 @@ export default function ElementRenderer({ element, value, onChange }) {
         </div>
       );
       
+      if (config.fontDisplayStyle === "Swatch") {
+        return (
+          <Box>
+            {fontStyles}
+            <Text as="p" variant="bodySm" fontWeight="semibold" paddingBlockEnd="100">{label}</Text>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+              {fonts.map((f, i) => {
+                const isSelected = f === selectedFont;
+                return (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={(e) => { e.preventDefault(); handleSelectChange(f); }}
+                    style={{
+                      fontFamily: f,
+                      padding: '8px 16px',
+                      border: isSelected ? '2px solid var(--p-color-border-brand)' : '1px solid var(--p-color-border)',
+                      borderRadius: '4px',
+                      backgroundColor: '#fff',
+                      cursor: 'pointer',
+                      fontSize: '14px'
+                    }}
+                  >
+                    {f}
+                  </button>
+                );
+              })}
+            </div>
+            {renderHelpText()}
+          </Box>
+        );
+      }
+
       return (
         <Box>
+           {fontStyles}
            <Text as="p" variant="bodySm" fontWeight="semibold" paddingBlockEnd="100">{label}</Text>
            <Popover
              active={popoverActive}

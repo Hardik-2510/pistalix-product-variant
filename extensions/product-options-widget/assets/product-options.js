@@ -1,3 +1,4 @@
+/* eslint-disable no-unused-vars */
 /* eslint-disable no-redeclare */
 /**
  * Pistalix Product Variant — Product Options Widget
@@ -120,7 +121,7 @@ if (!window.pistalixSubmitTrackerRegistered) {
     var urlArg = arguments[0];
     var urlStr = typeof urlArg === 'string' ? urlArg : (urlArg && urlArg.url ? urlArg.url : '');
     var config = arguments[1];
-    
+
     if (urlStr && urlStr.indexOf('/cart/add') !== -1) {
       if (config && config.body) {
         var wrapperEl = null;
@@ -137,7 +138,7 @@ if (!window.pistalixSubmitTrackerRegistered) {
               if (inp.type === 'radio' && !inp.checked) return;
               if (inp.type === 'checkbox' && !inp.checked) return;
               if (inp.disabled) return;
-              
+
               if (inp.type === 'file') {
                 if (inp.files && inp.files.length > 0) {
                   if (inp.files.length === 1) {
@@ -221,7 +222,7 @@ if (!window.pistalixSubmitTrackerRegistered) {
             if (inp.type === 'radio' && !inp.checked) return;
             if (inp.type === 'checkbox' && !inp.checked) return;
             if (inp.disabled) return;
-            
+
             if (inp.type === 'file') {
               if (inp.files && inp.files.length > 0) {
                 if (inp.files.length === 1) {
@@ -316,7 +317,24 @@ function escapeHTML(str) {
 }
 
 function getChoices(config) {
-  return config.choices || config.options || config.swatches || [];
+  var choices = config.choices || config.options || config.swatches || [];
+  if (config.textTransform && config.textTransform !== "Default") {
+    return choices.map(function(opt) {
+      var newOpt = Object.assign({}, opt);
+      var t = config.textTransform;
+      function transformText(text) {
+        if (!text) return text;
+        if (t === "Uppercase") return text.toUpperCase();
+        if (t === "Lowercase") return text.toLowerCase();
+        if (t === "Capitalize") return text.replace(/\b\w/g, function(l) { return l.toUpperCase(); });
+        return text;
+      }
+      if (newOpt.label) newOpt.label = transformText(newOpt.label);
+      if (newOpt.value) newOpt.value = transformText(newOpt.value);
+      return newOpt;
+    });
+  }
+  return choices;
 }
 
 function isDefault(opt) {
@@ -666,10 +684,16 @@ function createGroup(element) {
   var helpText = element.subtext || config.helpText;
 
   if (helpText) {
-    var help = document.createElement('div');
-    help.className = 'cap-help-text';
-    help.textContent = helpText;
-    group.appendChild(help);
+    if (config.helpTextPosition === "Tooltip") {
+      var tooltipIcon = document.createElement('span');
+      tooltipIcon.innerHTML = ' <span style="cursor:help; color:var(--p-color-text-subdued, #666);" title="' + escapeHTML(helpText) + '">ⓘ</span>';
+      labelWrap.appendChild(tooltipIcon);
+    } else {
+      var help = document.createElement('div');
+      help.className = 'cap-help-text';
+      help.textContent = helpText;
+      group.appendChild(help);
+    }
   }
 
   group.addEventListener('change', function () { updateDisplayValue(group); });
@@ -719,6 +743,7 @@ function renderTemplate(template, container) {
     else if (typeLower === 'checkbox') elDOM = renderCheckbox(element);
     else if (typeLower === 'button') elDOM = renderButtonSwatch(element);
     else if (typeLower === 'color swatch' || typeLower === 'color_swatch') elDOM = renderColorSwatch(element);
+    else if (typeLower === 'color picker' || typeLower === 'color_picker') elDOM = renderColorPicker(element);
     else if (typeLower === 'image swatch' || typeLower === 'image_swatch') elDOM = renderImageSwatch(element);
     else if (typeLower === 'file' || typeLower === 'file upload' || typeLower === 'file_upload') elDOM = renderFile(element);
     else if (typeLower === 'heading') elDOM = renderHeading(element);
@@ -729,6 +754,8 @@ function renderTemplate(template, container) {
     else if (typeLower === 'spacing') elDOM = renderSpacing(element);
     else if (typeLower === 'switch') elDOM = renderSwitch(element);
     else if (typeLower === 'bundle') elDOM = renderBundle(element);
+    else if (typeLower === 'hidden field' || typeLower === 'hidden_field') elDOM = renderHiddenField(element);
+    else if (typeLower === 'google font selector' || typeLower === 'font_picker') elDOM = renderFontPicker(element);
     else elDOM = null;
 
     if (elDOM) {
@@ -796,14 +823,18 @@ function applyDynamicStyles(wrapper) {
       else if (fname.indexOf('.woff') > -1) formatStr = ' format("woff")';
       else if (fname.indexOf('.ttf') > -1) formatStr = ' format("truetype")';
       else if (fname.indexOf('.otf') > -1) formatStr = ' format("opentype")';
-      
+
       css += '@font-face {\n  font-family: "' + font.name + '";\n  src: url("' + font.url + '")' + formatStr + ';\n  font-weight: normal;\n  font-style: normal;\n  font-display: swap;\n}\n';
     }
   }
 
   // General
   css += '.cap-options-wrapper { display: flex !important; flex-direction: row !important; flex-wrap: wrap !important; gap: 16px !important; margin: 0 !important; text-align: ' + alignment + ' !important; background-color: ' + (colors.appBackground || 'transparent') + ' !important; }\n';
-  css += '.cap-options-wrapper .cap-option-group { box-sizing: border-box !important; padding: 0 !important; margin: 0 !important; flex-shrink: 0 !important; border: none !important; }\n';
+  css += '.cap-options-wrapper .cap-option-group { display: flex !important; flex-direction: column !important; box-sizing: border-box !important; padding: 0 !important; margin: 0 !important; flex-shrink: 0 !important; border: none !important; }\n';
+  css += '.cap-options-wrapper .cap-option-group > * { order: 2; }\n';
+  css += '.cap-options-wrapper .cap-label-wrap { order: 1; }\n';
+  css += '.cap-options-wrapper .cap-help-text { order: 3; margin-top: 4px; }\n';
+  css += '.cap-options-wrapper .cap-error { order: 4; margin-top: 4px; }\n';
 
   var labelCSS = 'color: ' + (colors.labelText || '#111827') + ' !important;';
   if (typography.labelCustom) {
@@ -892,14 +923,18 @@ function validateCustomOptions() {
   wrapper.querySelectorAll('.cap-error').forEach(function (msg) { msg.classList.remove('visible'); });
   wrapper.querySelectorAll('.error').forEach(function (el) { el.classList.remove('error'); });
 
-  wrapper.querySelectorAll('.cap-option-group[data-required="true"]').forEach(function (group) {
+  wrapper.querySelectorAll('.cap-option-group').forEach(function (group) {
     if (group.style.display === 'none') return;
+    var isRequired = group.getAttribute('data-required') === 'true';
     var type = group.getAttribute('data-type');
     var isGroupValid = true;
+    var errorMessage = 'This field is required';
 
     if (['Text', 'Textarea', 'Number', 'Email', 'Phone', 'Datetime', 'Dropdown', 'Select', 'Color Dropdown', 'Image Dropdown'].indexOf(type) !== -1) {
       var input = group.querySelector('input, select, textarea');
-      if (!input || !input.value || input.value.trim() === '') {
+      var hasValue = input && input.value && input.value.trim() !== '';
+
+      if (isRequired && !hasValue) {
         isGroupValid = false;
         if (input) {
           input.classList.add('error');
@@ -908,27 +943,42 @@ function validateCustomOptions() {
             if (customSelect) customSelect.classList.add('error');
           }
         }
+      } else if (hasValue && type === 'Email') {
+        var emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(input.value)) {
+          isGroupValid = false;
+          errorMessage = 'Please enter a valid email address.';
+          if (input) input.classList.add('error');
+        }
       }
     } else if (['Radio Button', 'Color Swatch', 'Image Swatch', 'Button'].indexOf(type) !== -1) {
       var hiddenInput = group.querySelector('input[type="hidden"]');
-      if (!hiddenInput || !hiddenInput.value) {
+      if (isRequired && (!hiddenInput || !hiddenInput.value)) {
         isGroupValid = false;
         var swatchGroup = group.querySelector('.cap-swatch-group, .cap-radio-group');
         if (swatchGroup) swatchGroup.classList.add('error');
       }
     } else if (type === 'Checkbox') {
       var checked = group.querySelectorAll('input[type="checkbox"]:checked');
-      if (checked.length === 0) {
+      if (isRequired && checked.length === 0) {
         isGroupValid = false;
         var checkboxGroup = group.querySelector('.cap-checkbox-group');
         if (checkboxGroup) checkboxGroup.classList.add('error');
+      }
+    } else if (type === 'File Upload') {
+      var fileInput = group.querySelector('input[type="file"]');
+      if (isRequired && (!fileInput || !fileInput.files || fileInput.files.length === 0)) {
+         isGroupValid = false;
       }
     }
 
     if (!isGroupValid) {
       isValid = false;
-      var errorMsg = group.querySelector('.cap-error');
-      if (errorMsg) errorMsg.classList.add('visible');
+      var errorMsgEl = group.querySelector('.cap-error');
+      if (errorMsgEl) {
+        errorMsgEl.textContent = errorMessage;
+        errorMsgEl.classList.add('visible');
+      }
       if (!firstErrorEl) firstErrorEl = group;
     }
   });
@@ -943,7 +993,7 @@ function validateCustomOptions() {
   if (!isValid && firstErrorEl) {
     var toggleStates = getToggleStates();
     if (toggleStates.autoScroll !== false) {
-      setTimeout(function() {
+      setTimeout(function () {
         firstErrorEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }, 50);
     }
@@ -1045,7 +1095,7 @@ function injectIntoCartForm(wrapper, container) {
   // Guarantee "Go to cart immediately" works by hijacking the button click in capture phase
   var submitBtn = cartForm.querySelector('button[type="submit"], input[type="submit"], [name="add"], .add-to-cart');
   if (submitBtn) {
-    submitBtn.addEventListener('click', function(e) {
+    submitBtn.addEventListener('click', function (e) {
       if (!validateCustomOptions()) {
         e.preventDefault();
         e.stopPropagation();
@@ -1261,12 +1311,18 @@ function renderText(element) {
   if (config.minCharacter) input.minLength = parseInt(config.minCharacter, 10);
 
   // Apply textTransform
-  if (config.textTransform === "Uppercase") {
-    input.style.textTransform = "uppercase";
-  } else if (config.textTransform === "Lowercase") {
-    input.style.textTransform = "lowercase";
-  } else if (config.textTransform === "Capitalize") {
-    input.style.textTransform = "capitalize";
+  if (config.textTransform === "Uppercase" || config.textTransform === "Lowercase" || config.textTransform === "Capitalize") {
+    if (config.textTransform === "Uppercase") input.style.textTransform = "uppercase";
+    else if (config.textTransform === "Lowercase") input.style.textTransform = "lowercase";
+    else if (config.textTransform === "Capitalize") input.style.textTransform = "capitalize";
+
+    input.addEventListener('change', function () {
+      if (config.textTransform === "Uppercase") this.value = this.value.toUpperCase();
+      else if (config.textTransform === "Lowercase") this.value = this.value.toLowerCase();
+      else if (config.textTransform === "Capitalize") {
+        this.value = this.value.replace(/\b\w/g, function (l) { return l.toUpperCase(); });
+      }
+    });
   }
 
   // Apply allowedValue
@@ -1280,15 +1336,7 @@ function renderText(element) {
     });
   }
 
-  // HelpText Tooltip overrides default HelpText
-  if (config.helpText && config.helpTextPosition === "Tooltip") {
-    var label = group.querySelector('.cap-label');
-    if (label) {
-      label.innerHTML += ' <span style="cursor:help; color:var(--p-color-text-subdued, #666);" title="' + escapeHTML(config.helpText) + '">ⓘ</span>';
-    }
-    var existingHelp = group.querySelector('.cap-help-text');
-    if (existingHelp) existingHelp.style.display = 'none';
-  }
+
 
   var p = parseFloat(config.price);
   if (!isNaN(p) && p > 0) {
@@ -1371,122 +1419,162 @@ function renderFile(element) {
   }
   var maxSizeMB = parseInt(config.maxSizeMB, 10) || 10;
   var maxSizeBytes = maxSizeMB * 1024 * 1024;
-  
+
   var p = parseFloat(config.price);
   if (!isNaN(p) && p > 0) {
     input.setAttribute('data-price', Math.round(p * 100));
   }
 
-  // Custom Button UI
-  var btn = document.createElement('button');
-  btn.type = 'button';
-  btn.className = 'cap-button cap-file-button';
-  btn.style.cssText = 'padding: 8px 16px; border-radius: 4px; border: 1px solid var(--p-color-border, #c9cccf); background: var(--p-color-bg-surface-secondary, #f4f6f8); cursor: pointer; display: inline-flex; align-items: center; gap: 8px; font-size: 14px;';
-  btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg> ' + (config.buttonText || 'Upload File');
+  var dropzone = document.createElement('label');
+  dropzone.className = 'cap-file-dropzone';
+  dropzone.style.cssText = 'display: block; cursor: pointer;';
   
-  btn.addEventListener('click', function() {
-    input.click();
+  var dropzoneInner = document.createElement('div');
+  dropzoneInner.style.cssText = 'border: 1px dashed #8C9196; padding: 32px 20px; text-align: center; border-radius: 4px; background-color: #FFFFFF; cursor: pointer; transition: all 0.2s ease;';
+  
+  dropzoneInner.innerHTML = '<div style="display: flex; flex-direction: column; gap: 8px; align-items: center;"><div style="background-color: #E8F0FA; padding: 6px 14px; border-radius: 4px; display: inline-block; color: #1F5199; font-weight: 600; font-size: 14px;">Choose file</div><p style="margin: 0; color: #6d7175; font-size: 14px;">or drop file to upload</p></div>';
+
+  // Screen reader hidden text
+  var srOnly = document.createElement('span');
+  srOnly.style.cssText = 'border: 0; clip: rect(0 0 0 0); height: 1px; margin: -1px; overflow: hidden; padding: 0; position: absolute; width: 1px;';
+  srOnly.textContent = 'Upload ' + element.label;
+  dropzone.appendChild(srOnly);
+  
+  // We place the input inside the label so clicking the label opens the file dialog
+  dropzone.appendChild(input);
+  dropzone.appendChild(dropzoneInner);
+
+  // Drag and drop events on the inner div
+  dropzoneInner.addEventListener('dragover', function(e) {
+    e.preventDefault();
+    dropzoneInner.style.backgroundColor = '#F4F6F8';
+  });
+  dropzoneInner.addEventListener('dragleave', function(e) {
+    e.preventDefault();
+    dropzoneInner.style.backgroundColor = '#FFFFFF';
+  });
+  dropzoneInner.addEventListener('drop', function(e) {
+    e.preventDefault();
+    dropzoneInner.style.backgroundColor = '#FFFFFF';
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      input.files = e.dataTransfer.files;
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    }
   });
 
-  // Success Message Container
-  var successMsg = document.createElement('div');
-  successMsg.className = 'cap-file-success-message';
-  successMsg.style.display = 'none';
-  successMsg.style.color = 'var(--p-color-text-success, #008000)';
-  successMsg.style.fontSize = '14px';
-  successMsg.style.marginTop = '8px';
-  successMsg.textContent = config.successMessage || 'File attached successfully!';
+  // Success state UI (matches App)
+  var successWrap = document.createElement('div');
+  successWrap.className = 'cap-file-success-wrap';
+  successWrap.style.cssText = 'display: none; background-color: #3371C8; padding: 12px; border-radius: 4px; align-items: center; justify-content: space-between; animation: fadeInUpload 0.4s cubic-bezier(0.16, 1, 0.3, 1);';
 
-  // Preview container
-  var previewContainer = document.createElement('div');
-  previewContainer.className = 'cap-file-preview';
-  previewContainer.style.display = 'none';
-  previewContainer.style.marginTop = '10px';
-  previewContainer.style.gap = '10px';
-  previewContainer.style.flexWrap = 'wrap';
-  previewContainer.style.display = 'flex';
+  var successLeft = document.createElement('div');
+  successLeft.style.cssText = 'display: flex; align-items: center; gap: 16px; overflow: hidden;';
 
-  var appSettings = capConfig.settings || {};
-  if (typeof appSettings === 'string') {
-    try { appSettings = JSON.parse(appSettings); } catch (e) { /* ignore parse error */ }
+  var previewBox = document.createElement('div');
+  previewBox.style.cssText = 'width: 48px; height: 56px; background-color: white; padding: 3px; border-radius: 2px; flex-shrink: 0; display: flex; align-items: center; justify-content: center;';
+
+  var infoBox = document.createElement('div');
+  infoBox.style.cssText = 'overflow: hidden;';
+  var fileNameEl = document.createElement('p');
+  fileNameEl.style.cssText = 'margin: 0; font-size: 14px; font-weight: 600; color: white; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;';
+  var fileSizeEl = document.createElement('p');
+  fileSizeEl.style.cssText = 'margin: 0; font-size: 12px; color: white;';
+  
+  infoBox.appendChild(fileNameEl);
+  infoBox.appendChild(fileSizeEl);
+  
+  successLeft.appendChild(previewBox);
+  successLeft.appendChild(infoBox);
+
+  var removeBtn = document.createElement('button');
+  removeBtn.type = 'button';
+  removeBtn.style.cssText = 'width: 28px; height: 28px; border-radius: 50%; background-color: white; color: #3371C8; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: bold; padding: 0; flex-shrink: 0; margin-left: 12px;';
+  removeBtn.textContent = '✕';
+  
+  removeBtn.addEventListener('click', function(e) {
+    e.preventDefault();
+    input.value = '';
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+
+  successWrap.appendChild(successLeft);
+  successWrap.appendChild(removeBtn);
+
+  // Add keyframes for animation if not already present
+  if (!document.getElementById('cap-file-animations')) {
+    var style = document.createElement('style');
+    style.id = 'cap-file-animations';
+    style.innerHTML = '@keyframes fadeInUpload { 0% { opacity: 0; transform: scale(0.98) translateY(5px); } 100% { opacity: 1; transform: scale(1) translateY(0); } }';
+    document.head.appendChild(style);
   }
-  var previewSetting = appSettings.filePreview || "Show image if the uploaded file is a photo, otherwise show link";
 
-  input.addEventListener('change', function (e) {
+  // Handle file change
+  input.addEventListener('change', function(e) {
     var errorMsg = group.querySelector('.cap-error');
-    errorMsg.style.display = 'none';
-    successMsg.style.display = 'none';
-    previewContainer.innerHTML = '';
-    
+    if (errorMsg) errorMsg.style.display = 'none';
+
     var files = e.target.files;
     if (!files || files.length === 0) {
-      previewContainer.style.display = 'none';
+      dropzone.style.display = 'block';
+      successWrap.style.display = 'none';
       updateTotalPrice();
       return;
     }
 
     // Validation
     if (files.length > maxFiles) {
-      errorMsg.textContent = "Maximum " + maxFiles + " files allowed.";
-      errorMsg.style.display = 'block';
+      if (errorMsg) {
+        errorMsg.textContent = "Maximum " + maxFiles + " files allowed.";
+        errorMsg.style.display = 'block';
+      }
       input.value = "";
+      dropzone.style.display = 'block';
+      successWrap.style.display = 'none';
       return;
     }
-    
+
     for (var i = 0; i < files.length; i++) {
       if (files[i].size > maxSizeBytes) {
-        errorMsg.textContent = "File " + files[i].name + " is too large. Max size is " + maxSizeMB + "MB.";
-        errorMsg.style.display = 'block';
+        if (errorMsg) {
+          errorMsg.textContent = "File " + files[i].name + " is too large. Max size is " + maxSizeMB + "MB.";
+          errorMsg.style.display = 'block';
+        }
         input.value = "";
+        dropzone.style.display = 'block';
+        successWrap.style.display = 'none';
         return;
       }
     }
 
     // Success and Preview
-    successMsg.style.display = 'block';
-    previewContainer.style.display = 'flex';
-
-    Array.from(files).forEach(function(file) {
-      var itemWrap = document.createElement('div');
-      itemWrap.style.display = 'flex';
-      itemWrap.style.alignItems = 'center';
-      itemWrap.style.gap = '8px';
-      itemWrap.style.border = '1px solid var(--p-color-border, #c9cccf)';
-      itemWrap.style.padding = '4px 8px';
-      itemWrap.style.borderRadius = '4px';
-
-      if (file.type.indexOf('image/') === 0 && previewSetting === "Show image if the uploaded file is a photo, otherwise show link") {
-        var imgPreview = document.createElement('img');
-        imgPreview.style.maxWidth = '40px';
-        imgPreview.style.maxHeight = '40px';
-        imgPreview.style.borderRadius = '2px';
-        
-        var reader = new FileReader();
-        reader.onload = function(evt) {
-          imgPreview.src = evt.target.result;
-        };
-        reader.readAsDataURL(file);
-        
-        itemWrap.appendChild(imgPreview);
-      }
-      
-      var textPreview = document.createElement('span');
-      textPreview.style.fontSize = '13px';
-      textPreview.style.color = 'var(--p-color-text-subdued, #666)';
-      textPreview.textContent = file.name;
-      itemWrap.appendChild(textPreview);
-      
-      previewContainer.appendChild(itemWrap);
-    });
+    var f = files[0];
+    fileNameEl.textContent = f.name;
+    fileSizeEl.textContent = (f.size / 1024 / 1024).toFixed(2) + ' MB';
     
+    if (f.type.indexOf('image/') === 0) {
+      var reader = new FileReader();
+      reader.onload = function(evt) {
+        previewBox.innerHTML = '<img src="' + evt.target.result + '" style="width: 100%; height: 100%; object-fit: cover; border-radius: 2px;" />';
+      };
+      reader.readAsDataURL(f);
+    } else {
+      previewBox.innerHTML = '<div style="width: 100%; height: 100%; background-color: #F4F6F8; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #6d7175; border-radius: 2px;">FILE</div>';
+    }
+
+    dropzone.style.display = 'none';
+    successWrap.style.display = 'flex';
+
     input.dispatchEvent(new Event('input', { bubbles: true }));
     updateTotalPrice();
   });
 
-  wrapper.appendChild(btn);
-  wrapper.appendChild(input);
-  wrapper.appendChild(successMsg);
-  wrapper.appendChild(previewContainer);
+  wrapper.appendChild(dropzone);
+  wrapper.appendChild(successWrap);
+  
+  var allowedExtsText = document.createElement('p');
+  allowedExtsText.style.cssText = 'margin: 8px 0 0; color: var(--p-color-text-subdued, #6d7175); font-size: 14px;';
+  allowedExtsText.textContent = '(Allowed extension: ' + (config.allowedExtensions || '.jpeg, .jpg, .png, .webp, .svg') + ')';
+  wrapper.appendChild(allowedExtsText);
 
   if (config.helpText && config.helpTextPosition === "Tooltip") {
     var label = group.querySelector('.cap-label');
@@ -1516,12 +1604,18 @@ function renderTextarea(element) {
   if (config.minCharacter) textarea.minLength = parseInt(config.minCharacter, 10);
 
   // Apply textTransform
-  if (config.textTransform === "Uppercase") {
-    textarea.style.textTransform = "uppercase";
-  } else if (config.textTransform === "Lowercase") {
-    textarea.style.textTransform = "lowercase";
-  } else if (config.textTransform === "Capitalize") {
-    textarea.style.textTransform = "capitalize";
+  if (config.textTransform === "Uppercase" || config.textTransform === "Lowercase" || config.textTransform === "Capitalize") {
+    if (config.textTransform === "Uppercase") textarea.style.textTransform = "uppercase";
+    else if (config.textTransform === "Lowercase") textarea.style.textTransform = "lowercase";
+    else if (config.textTransform === "Capitalize") textarea.style.textTransform = "capitalize";
+
+    textarea.addEventListener('change', function () {
+      if (config.textTransform === "Uppercase") this.value = this.value.toUpperCase();
+      else if (config.textTransform === "Lowercase") this.value = this.value.toLowerCase();
+      else if (config.textTransform === "Capitalize") {
+        this.value = this.value.replace(/\b\w/g, function (l) { return l.toUpperCase(); });
+      }
+    });
   }
 
   // Apply allowedValue
@@ -1535,15 +1629,7 @@ function renderTextarea(element) {
     });
   }
 
-  // HelpText Tooltip overrides default HelpText
-  if (config.helpText && config.helpTextPosition === "Tooltip") {
-    var label = group.querySelector('.cap-label');
-    if (label) {
-      label.innerHTML += ' <span style="cursor:help; color:var(--p-color-text-subdued, #666);" title="' + escapeHTML(config.helpText) + '">ⓘ</span>';
-    }
-    var existingHelp = group.querySelector('.cap-help-text');
-    if (existingHelp) existingHelp.style.display = 'none';
-  }
+
 
   var p = parseFloat(config.price);
   if (!isNaN(p) && p > 0) {
@@ -1621,15 +1707,7 @@ function renderNumber(element) {
     input.setAttribute('data-price', Math.round(p * 100));
   }
 
-  // HelpText Tooltip overrides default HelpText
-  if (config.helpText && config.helpTextPosition === "Tooltip") {
-    var label = group.querySelector('.cap-label');
-    if (label) {
-      label.innerHTML += ' <span style="cursor:help; color:var(--p-color-text-subdued, #666);" title="' + escapeHTML(config.helpText) + '">ⓘ</span>';
-    }
-    var existingHelp = group.querySelector('.cap-help-text');
-    if (existingHelp) existingHelp.style.display = 'none';
-  }
+
 
   // Prefix / Suffix wrapper
   if ((config.prefixType === "Text" && config.prefixText) || config.suffix) {
@@ -1712,15 +1790,32 @@ function renderColorDropdown(element) {
   var config = parseConfig(element.config);
   var choices = getChoices(config);
 
+  var previewW = (config.swatchWidth || 50) + 'px';
+  var previewH = (config.swatchHeight || 50) + 'px';
+  var previewRadius = config.swatchShape === 'Square' ? '4px' : '50%';
 
+  var layoutWrap = document.createElement('div');
+  layoutWrap.className = 'cap-color-dropdown-layout';
+  layoutWrap.style.display = 'flex';
+  layoutWrap.style.alignItems = 'center';
+  layoutWrap.style.gap = '8px';
+
+  var colorPreview = document.createElement('div');
+  colorPreview.className = 'cap-color-dropdown-left-preview';
+  colorPreview.style.display = 'none';
+  colorPreview.style.width = previewW;
+  colorPreview.style.height = previewH;
+  colorPreview.style.borderRadius = previewRadius;
+  colorPreview.style.border = '1px solid #c9cccf';
+  layoutWrap.appendChild(colorPreview);
+
+  var dropdownWrap = document.createElement('div');
+  dropdownWrap.className = 'cap-color-dropdown-wrap';
+  dropdownWrap.style.flex = '1';
+  dropdownWrap.style.position = 'relative';
 
   var selectedDisplay = document.createElement('div');
   selectedDisplay.className = 'cap-color-dropdown-selected';
-
-  var selectedThumb = document.createElement('div');
-  selectedThumb.className = 'cap-color-dropdown-thumb';
-  selectedThumb.style.display = 'none';
-  selectedDisplay.appendChild(selectedThumb);
 
   var selectedText = document.createElement('span');
   selectedText.textContent = '-- Select ' + element.label + ' --';
@@ -1760,6 +1855,9 @@ function renderColorDropdown(element) {
     var thumb = document.createElement('div');
     thumb.className = 'cap-color-dropdown-option-color';
     thumb.style.backgroundColor = colorVal;
+    thumb.style.width = previewW;
+    thumb.style.height = previewH;
+    thumb.style.borderRadius = previewRadius;
     item.appendChild(thumb);
 
     var label = document.createElement('span');
@@ -1771,8 +1869,8 @@ function renderColorDropdown(element) {
       hiddenInput.value = opt.value || opt.label;
       select.value = opt.value || opt.label;
       selectedText.textContent = getOptionLabel(opt);
-      selectedThumb.style.backgroundColor = colorVal;
-      selectedThumb.style.display = 'inline-block';
+      colorPreview.style.backgroundColor = colorVal;
+      colorPreview.style.display = 'inline-block';
       optionsList.style.display = 'none';
       hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
       hiddenInput.dispatchEvent(new Event('input', { bubbles: true }));
@@ -1783,15 +1881,12 @@ function renderColorDropdown(element) {
     if (isDefault(opt)) {
       hiddenInput.value = opt.value || opt.label;
       selectedText.textContent = getOptionLabel(opt);
-      selectedThumb.style.backgroundColor = colorVal;
-      selectedThumb.style.display = 'inline-block';
+      colorPreview.style.backgroundColor = colorVal;
+      colorPreview.style.display = 'inline-block';
     }
 
     optionsList.appendChild(item);
   });
-
-  var dropdownWrap = document.createElement('div');
-  dropdownWrap.className = 'cap-color-dropdown-wrap';
 
   selectedDisplay.addEventListener('click', function () {
     optionsList.style.display = optionsList.style.display === 'none' ? 'block' : 'none';
@@ -1805,10 +1900,12 @@ function renderColorDropdown(element) {
 
   dropdownWrap.appendChild(selectedDisplay);
   dropdownWrap.appendChild(optionsList);
+  
+  layoutWrap.appendChild(dropdownWrap);
 
   group.appendChild(hiddenInput);
   group.appendChild(select);
-  group.appendChild(dropdownWrap);
+  group.appendChild(layoutWrap);
   group.appendChild(createErrorMsg());
   return group;
 }
@@ -2152,14 +2249,20 @@ function renderImageDropdown(element) {
   var config = parseConfig(element.config);
   var choices = getChoices(config);
 
-
+  var previewW = (config.swatchWidth || 50) + 'px';
+  var previewH = (config.swatchHeight || 50) + 'px';
+  var previewRadius = config.swatchShape === 'Square' ? '4px' : '50%';
 
   var layoutWrap = document.createElement('div');
   layoutWrap.className = 'cap-image-dropdown-layout';
+  layoutWrap.style.alignItems = 'center';
 
   var imgPreview = document.createElement('img');
   imgPreview.className = 'cap-image-dropdown-left-preview';
   imgPreview.style.display = 'none';
+  imgPreview.style.width = previewW;
+  imgPreview.style.height = previewH;
+  imgPreview.style.borderRadius = previewRadius;
   layoutWrap.appendChild(imgPreview);
 
   var dropdownWrap = document.createElement('div');
@@ -2207,6 +2310,9 @@ function renderImageDropdown(element) {
       img.src = opt.image;
       img.alt = opt.label;
       img.className = 'cap-image-dropdown-option-img';
+      img.style.width = previewW;
+      img.style.height = previewH;
+      img.style.borderRadius = previewRadius;
       item.appendChild(img);
     }
 
@@ -2266,26 +2372,39 @@ function renderImageDropdown(element) {
 }
 
 function applyScrollStyle(wrap, config, typeStr) {
+  var isHorizontal = config.directionStyle === 'horizontal';
+
   if (config.scrollType === 'By fixed height' && config.scrollHeight) {
-    wrap.style.maxHeight = config.scrollHeight + 'px';
-    wrap.style.overflowY = 'auto';
-    wrap.style.overflowX = 'hidden';
-    wrap.style.paddingRight = '8px';
+    if (isHorizontal) {
+      wrap.style.maxWidth = config.scrollHeight + 'px';
+      wrap.classList.add('cap-horizontal-scroll');
+    } else {
+      wrap.style.maxHeight = config.scrollHeight + 'px';
+      wrap.style.overflowY = 'auto';
+      wrap.style.overflowX = 'hidden';
+      wrap.style.paddingRight = '8px';
+    }
   } else if (config.scrollType === 'By number of option values' && config.scrollVisibleItems) {
     var n = parseInt(config.scrollVisibleItems) || 3;
     var isVertical = config.directionStyle === 'vertical';
     var gap = (typeStr === 'image swatch' && isVertical) ? 12 : 8;
-    
-    var itemH = 20;
-    if (typeStr === 'image swatch') itemH = parseInt(config.swatchHeight || 50);
-    else if (typeStr === 'color swatch' || typeStr === 'button') itemH = 36;
-    else itemH = 24;
-    
-    var totalHeight = (itemH * n) + (gap * Math.max(0, n - 1));
-    wrap.style.maxHeight = totalHeight + 'px';
-    wrap.style.overflowY = 'auto';
-    wrap.style.overflowX = 'hidden';
-    wrap.style.paddingRight = '8px';
+
+    var itemSize = 20;
+    if (typeStr === 'image swatch') itemSize = parseInt(isHorizontal ? (config.swatchWidth || 50) : (config.swatchHeight || 50));
+    else if (typeStr === 'color swatch') itemSize = parseInt(isHorizontal ? (config.swatchWidth || 36) : (config.swatchHeight || 36));
+    else if (typeStr === 'button') itemSize = isHorizontal ? parseInt(config.swatchWidth || 100) : parseInt(config.swatchHeight || 36);
+    else itemSize = isHorizontal ? 100 : 24;
+
+    var totalSize = (itemSize * n) + (gap * Math.max(0, n - 1));
+    if (isHorizontal) {
+      wrap.style.maxWidth = totalSize + 'px';
+      wrap.classList.add('cap-horizontal-scroll');
+    } else {
+      wrap.style.maxHeight = totalSize + 'px';
+      wrap.style.overflowY = 'auto';
+      wrap.style.overflowX = 'hidden';
+      wrap.style.paddingRight = '8px';
+    }
   }
 }
 
@@ -2406,6 +2525,20 @@ function renderButtonSwatch(element) {
   wrap.className = 'cap-swatch-group';
   applyScrollStyle(wrap, config, 'button');
 
+  var isVertical = config.directionStyle === 'vertical';
+  var isHorizontal = config.directionStyle === 'horizontal';
+  var hasHorizontalScroll = isHorizontal && config.scrollType && config.scrollType !== 'Default';
+  if (isVertical) {
+    wrap.style.display = 'flex';
+    wrap.style.flexDirection = 'column';
+    wrap.style.gap = '12px';
+    wrap.style.flexWrap = 'nowrap';
+  } else {
+    wrap.style.display = 'flex';
+    wrap.style.flexWrap = hasHorizontalScroll ? 'nowrap' : 'wrap';
+    wrap.style.gap = '8px';
+  }
+
   choices.forEach(function (opt) {
     var btn = document.createElement('button');
     btn.type = 'button';
@@ -2413,15 +2546,36 @@ function renderButtonSwatch(element) {
     btn.textContent = getOptionLabel(opt);
     btn.setAttribute('data-price', getOptionPriceCents(opt));
 
+    if (config.swatchWidth) btn.style.width = config.swatchWidth + 'px';
+    if (config.swatchHeight) btn.style.height = config.swatchHeight + 'px';
+    if (config.swatchWidth) btn.style.padding = '0';
+    
+    var borderRadius = config.swatchShape === 'Round' ? '50px' : '4px';
+    btn.style.borderRadius = borderRadius;
+
     if (isDefault(opt)) {
       btn.classList.add('cap-selected');
       hiddenInput.value = opt.value || opt.label;
     }
 
     btn.addEventListener('click', function () {
-      wrap.querySelectorAll('.cap-button-swatch').forEach(function (b) { b.classList.remove('cap-selected'); });
-      btn.classList.add('cap-selected');
-      hiddenInput.value = opt.value || opt.label;
+      if (config.allowMultiple) {
+        btn.classList.toggle('cap-selected');
+      } else {
+        var wasSelected = btn.classList.contains('cap-selected');
+        wrap.querySelectorAll('.cap-button-swatch').forEach(function (b) { b.classList.remove('cap-selected'); });
+        if (!wasSelected || config.required) {
+          btn.classList.add('cap-selected');
+        }
+      }
+
+      var selectedValues = [];
+      wrap.querySelectorAll('.cap-button-swatch.cap-selected').forEach(function(b) {
+        var optMatch = choices.find(function(c) { return getOptionLabel(c) === b.textContent; });
+        if (optMatch) selectedValues.push(optMatch.value || optMatch.label);
+      });
+      hiddenInput.value = selectedValues.join(', ');
+      
       hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
       hiddenInput.dispatchEvent(new Event('input', { bubbles: true }));
       updateTotalPrice();
@@ -2450,16 +2604,44 @@ function renderColorSwatch(element) {
   wrap.className = 'cap-swatch-group';
   applyScrollStyle(wrap, config, 'color swatch');
 
+  var isVertical = config.directionStyle === 'vertical';
+  var isHorizontal = config.directionStyle === 'horizontal';
+  var hasHorizontalScroll = isHorizontal && config.scrollType && config.scrollType !== 'Default';
+  if (isVertical) {
+    wrap.style.display = 'flex';
+    wrap.style.flexDirection = 'column';
+    wrap.style.gap = '12px';
+    wrap.style.flexWrap = 'nowrap';
+  } else {
+    wrap.style.display = 'flex';
+    wrap.style.flexWrap = hasHorizontalScroll ? 'nowrap' : 'wrap';
+    wrap.style.gap = '8px';
+  }
+
   var textDisplay = document.createElement('div');
   textDisplay.className = 'cap-help-text';
   textDisplay.style.marginTop = '4px';
 
   choices.forEach(function (opt) {
+    var optionWrap = document.createElement('div');
+    if (isVertical) {
+      optionWrap.style.display = 'flex';
+      optionWrap.style.width = '100%';
+      optionWrap.style.alignItems = 'center';
+      optionWrap.style.gap = '12px';
+    } else {
+      optionWrap.style.display = 'inline-flex';
+    }
+
     var swatch = document.createElement('span');
     swatch.className = 'cap-color-swatch';
     swatch.style.backgroundColor = opt.color || opt.value || '#ccc';
     swatch.title = opt.label;
     swatch.setAttribute('data-price', getOptionPriceCents(opt));
+
+    if (config.swatchWidth) swatch.style.width = config.swatchWidth + 'px';
+    if (config.swatchHeight) swatch.style.height = config.swatchHeight + 'px';
+    swatch.style.borderRadius = config.swatchShape === 'Square' ? '4px' : '50%';
 
     if (isDefault(opt)) {
       swatch.classList.add('cap-selected');
@@ -2468,21 +2650,89 @@ function renderColorSwatch(element) {
     }
 
     swatch.addEventListener('click', function () {
-      wrap.querySelectorAll('.cap-color-swatch').forEach(function (s) { s.classList.remove('cap-selected'); });
-      swatch.classList.add('cap-selected');
-      hiddenInput.value = opt.value || opt.label;
-      textDisplay.textContent = getOptionLabel(opt);
+      if (config.allowMultiple) {
+        swatch.classList.toggle('cap-selected');
+      } else {
+        var wasSelected = swatch.classList.contains('cap-selected');
+        wrap.querySelectorAll('.cap-color-swatch').forEach(function (s) { s.classList.remove('cap-selected'); });
+        if (!wasSelected || config.required) {
+          swatch.classList.add('cap-selected');
+        }
+      }
+
+      var selectedValues = [];
+      var selectedLabels = [];
+      wrap.querySelectorAll('.cap-color-swatch.cap-selected').forEach(function(s) {
+        var optMatch = choices.find(function(c) { return c.label === s.title; });
+        if (optMatch) {
+          selectedValues.push(optMatch.value || optMatch.label);
+          selectedLabels.push(getOptionLabel(optMatch));
+        }
+      });
+      
+      hiddenInput.value = selectedValues.join(', ');
+      textDisplay.textContent = selectedLabels.join(', ');
+      
       hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
       hiddenInput.dispatchEvent(new Event('input', { bubbles: true }));
       updateTotalPrice();
     });
 
-    wrap.appendChild(swatch);
+    optionWrap.appendChild(swatch);
+
+    if (isVertical) {
+      var labelSpan = document.createElement('span');
+      labelSpan.textContent = getOptionLabel(opt);
+      labelSpan.style.fontSize = '14px';
+      labelSpan.style.cursor = 'pointer';
+      labelSpan.addEventListener('click', function () {
+        swatch.click();
+      });
+      optionWrap.appendChild(labelSpan);
+    }
+
+    wrap.appendChild(optionWrap);
   });
 
   group.appendChild(hiddenInput);
   group.appendChild(wrap);
   group.appendChild(textDisplay);
+  group.appendChild(createErrorMsg());
+  return group;
+}
+
+function renderColorPicker(element) {
+  var group = createGroup(element);
+  var config = parseConfig(element.config);
+
+  var hiddenInput = document.createElement('input');
+  hiddenInput.type = 'hidden';
+  hiddenInput.name = propName(element.label);
+  hiddenInput.value = config.defaultColor || '#000000';
+
+  var colorInput = document.createElement('input');
+  colorInput.type = 'color';
+  colorInput.className = 'cap-color-picker-input';
+  colorInput.value = config.defaultColor || '#000000';
+  colorInput.style.width = '40px';
+  colorInput.style.height = '40px';
+  colorInput.style.padding = '0';
+  colorInput.style.border = '1px solid #c9cccf';
+  colorInput.style.borderRadius = '4px';
+  colorInput.style.cursor = 'pointer';
+
+  colorInput.addEventListener('input', function () {
+    hiddenInput.value = colorInput.value;
+    hiddenInput.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  
+  colorInput.addEventListener('change', function () {
+    hiddenInput.value = colorInput.value;
+    hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+
+  group.appendChild(hiddenInput);
+  group.appendChild(colorInput);
   group.appendChild(createErrorMsg());
   return group;
 }
@@ -2502,6 +2752,8 @@ function renderImageSwatch(element) {
   applyScrollStyle(wrap, config, 'image swatch');
 
   var isVertical = config.directionStyle === 'vertical';
+  var isHorizontal = config.directionStyle === 'horizontal';
+  var hasHorizontalScroll = isHorizontal && config.scrollType && config.scrollType !== 'Default';
   if (isVertical) {
     wrap.style.display = 'flex';
     wrap.style.flexDirection = 'column';
@@ -2509,7 +2761,7 @@ function renderImageSwatch(element) {
     wrap.style.flexWrap = 'nowrap';
   } else {
     wrap.style.display = 'flex';
-    wrap.style.flexWrap = 'wrap';
+    wrap.style.flexWrap = hasHorizontalScroll ? 'nowrap' : 'wrap';
     wrap.style.gap = '8px';
   }
 
@@ -2539,6 +2791,7 @@ function renderImageSwatch(element) {
     swatch.style.height = (config.swatchHeight || 50) + 'px';
     swatch.style.objectFit = 'cover';
     swatch.style.cursor = 'pointer';
+    swatch.style.borderRadius = config.swatchShape === 'Square' ? '4px' : '50%';
 
     if (isDefault(opt)) {
       swatch.classList.add('cap-selected');
@@ -2547,10 +2800,29 @@ function renderImageSwatch(element) {
     }
 
     swatch.addEventListener('click', function () {
-      wrap.querySelectorAll('.cap-image-swatch').forEach(function (s) { s.classList.remove('cap-selected'); });
-      swatch.classList.add('cap-selected');
-      hiddenInput.value = opt.value || opt.label;
-      textDisplay.textContent = getOptionLabel(opt);
+      if (config.allowMultiple) {
+        swatch.classList.toggle('cap-selected');
+      } else {
+        var wasSelected = swatch.classList.contains('cap-selected');
+        wrap.querySelectorAll('.cap-image-swatch').forEach(function (s) { s.classList.remove('cap-selected'); });
+        if (!wasSelected || config.required) {
+          swatch.classList.add('cap-selected');
+        }
+      }
+
+      var selectedValues = [];
+      var selectedLabels = [];
+      wrap.querySelectorAll('.cap-image-swatch.cap-selected').forEach(function(s) {
+        var optMatch = choices.find(function(c) { return c.label === s.title; });
+        if (optMatch) {
+          selectedValues.push(optMatch.value || optMatch.label);
+          selectedLabels.push(getOptionLabel(optMatch));
+        }
+      });
+      
+      hiddenInput.value = selectedValues.join(', ');
+      textDisplay.textContent = selectedLabels.join(', ');
+      
       hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
       hiddenInput.dispatchEvent(new Event('input', { bubbles: true }));
       updateTotalPrice();
@@ -2563,7 +2835,7 @@ function renderImageSwatch(element) {
       labelSpan.textContent = getOptionLabel(opt);
       labelSpan.style.fontSize = '14px';
       labelSpan.style.cursor = 'pointer';
-      labelSpan.addEventListener('click', function() {
+      labelSpan.addEventListener('click', function () {
         swatch.click();
       });
       optionWrap.appendChild(labelSpan);
@@ -2644,9 +2916,10 @@ function renderParagraph(element) {
   div._element = element;
 
   var config = parseConfig(element.config);
-  var p = document.createElement('p');
+  var p = document.createElement('div');
   p.className = 'cap-paragraph';
-  p.textContent = config.content || element.subtext || element.label;
+  p.style.textAlign = config.align || 'left';
+  p.innerHTML = config.content || element.subtext || element.label || '';
   div.appendChild(p);
   return div;
 }
@@ -2715,15 +2988,21 @@ function renderPopupModal(element) {
     'align-items:center'
   ].join(';');
 
-  var modalWidth = config.modalWidth || '560px';
+  var rawWidth = config.modalWidth || '';
+  var modalMaxWidth = !rawWidth ? '90vw' : (String(rawWidth).includes('px') || String(rawWidth).includes('%') || rawWidth === 'auto' ? rawWidth : rawWidth + 'px');
+  var modalWidth = !rawWidth ? 'fit-content' : '90%';
+  
+  var rawHeight = config.modalHeight || '';
+  var modalHeight = !rawHeight ? 'auto' : (String(rawHeight).includes('px') || String(rawHeight).includes('%') || rawHeight === 'auto' ? rawHeight : rawHeight + 'px');
 
   var modal = document.createElement('div');
   modal.style.cssText = [
     'background:white',
     'border-radius:8px',
     'padding:24px',
-    'max-width:' + modalWidth,
-    'width:90%',
+    'max-width:' + modalMaxWidth,
+    'width:' + modalWidth,
+    'height:' + modalHeight,
     'max-height:80vh',
     'overflow-y:auto',
     'position:relative',
@@ -3122,13 +3401,13 @@ function initCartPageFeatures(toggleStates) {
           // 1. Hide quantity box and remove button for add-on products
           if (toggleStates.hideQuantity && isAddon) {
             row.classList.add('cap-addon-cart-row');
-            
+
             // Still try inline styles just in case
             var qty = row.querySelector('.cart-item__quantity-wrapper');
             if (!qty) qty = row.querySelector('quantity-input, .cart__qty, .cart-item__quantity, input[name^="updates"]');
-            
+
             console.log("Pistalix Hiding Qty:", qty);
-            
+
             if (qty) qty.setAttribute('style', 'display: none !important; visibility: hidden !important;');
 
             var removeBtn = row.querySelector('cart-remove-button, .cart__remove, .cart-item__remove');
@@ -3138,11 +3417,11 @@ function initCartPageFeatures(toggleStates) {
           // 2. Visually update prices in cart if they are old
           if (item.properties && item.properties._final_price && toggleStates.addAddonPriceToProductPrice !== false) {
             var newPriceStr = (capConfig.moneyFormat || '${{amount}}').replace(/\{\{\s*amount[^}]*\}\}/, item.properties._final_price);
-            
+
             // Try to find the single item price element
             var priceEls = row.querySelectorAll('.price, .cart-item__price-wrapper > .price, .cart__price, .cart-item__price, td:nth-child(3) .price');
-            priceEls.forEach(function(el) {
-               el.innerHTML = newPriceStr;
+            priceEls.forEach(function (el) {
+              el.innerHTML = newPriceStr;
             });
 
             // Try to find the line total price element
@@ -3152,13 +3431,13 @@ function initCartPageFeatures(toggleStates) {
             }
             var newTotalStr = (capConfig.moneyFormat || '${{amount}}').replace(/\{\{\s*amount[^}]*\}\}/, lineTotal);
             var totalEls = row.querySelectorAll('.cart-item__totals .price, .cart-item__price-wrapper.cart-item__price-wrapper--total, .cart__final-price, td:nth-child(5) .price');
-            totalEls.forEach(function(el) {
-               el.innerHTML = newTotalStr;
+            totalEls.forEach(function (el) {
+              el.innerHTML = newTotalStr;
             });
-            
+
             // Also update any span elements containing the price
             var allMoneySpans = row.querySelectorAll('.money, .price-item');
-            allMoneySpans.forEach(function(el) {
+            allMoneySpans.forEach(function (el) {
               if (el.closest('.cart-item__totals, .cart__final-price, td:nth-child(5)')) {
                 el.innerHTML = newTotalStr;
               } else {
@@ -3211,4 +3490,104 @@ function initCartPageFeatures(toggleStates) {
 
   // Run initially
   applyCartModificationsDebounced();
+}
+
+function renderFontPicker(element) {
+  var group = createGroup(element);
+  var config = parseConfig(element.config);
+  var fonts = config.fonts || ['Marko One', 'Enriqueta', 'Grand Hotel', 'Itim', 'Ledger', 'Modern Antiqua', 'Noto Serif TC', 'Pirata One', 'Poppins'];
+  var isSwatch = config.fontDisplayStyle === 'Swatch';
+
+  var hiddenInput = document.createElement('input');
+  hiddenInput.type = 'hidden';
+  hiddenInput.name = propName(element.label);
+  hiddenInput.className = 'cap-input-hidden';
+  group.appendChild(hiddenInput);
+
+  // Dynamically load Google Fonts
+  if (fonts && fonts.length > 0) {
+    var fontQuery = fonts.map(function(f) { return 'family=' + f.replace(/ /g, '+'); }).join('&');
+    var fontUrl = 'https://fonts.googleapis.com/css2?' + fontQuery + '&display=swap';
+    var linkId = 'cap-google-fonts-' + element.id;
+    if (!document.getElementById(linkId)) {
+      var link = document.createElement('link');
+      link.id = linkId;
+      link.rel = 'stylesheet';
+      link.href = fontUrl;
+      document.head.appendChild(link);
+    }
+  }
+
+  if (isSwatch) {
+    var wrap = document.createElement('div');
+    wrap.style.display = 'flex';
+    wrap.style.flexWrap = 'wrap';
+    wrap.style.gap = '8px';
+
+    fonts.forEach(function (f, idx) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = f;
+      btn.style.fontFamily = f;
+      btn.style.padding = '8px 16px';
+      btn.style.border = '1px solid var(--p-color-border)';
+      btn.style.borderRadius = '4px';
+      btn.style.backgroundColor = '#fff';
+      btn.style.cursor = 'pointer';
+
+      btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        hiddenInput.value = f;
+        Array.from(wrap.children).forEach(function (c) {
+          c.style.border = '1px solid var(--p-color-border)';
+          c.style.boxShadow = 'none';
+        });
+        btn.style.border = '2px solid var(--p-color-border-brand, #000)';
+        hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+      wrap.appendChild(btn);
+    });
+    group.appendChild(wrap);
+  } else {
+    var select = document.createElement('select');
+    select.className = 'cap-input cap-select';
+    select.style.fontFamily = fonts[0];
+
+    var defaultOpt = document.createElement('option');
+    defaultOpt.value = '';
+    defaultOpt.textContent = config.placeholder || 'Select a font';
+    select.appendChild(defaultOpt);
+
+    fonts.forEach(function (f) {
+      var opt = document.createElement('option');
+      opt.value = f;
+      opt.textContent = f;
+      opt.style.fontFamily = f;
+      select.appendChild(opt);
+    });
+
+    select.addEventListener('change', function () {
+      hiddenInput.value = select.value;
+      select.style.fontFamily = select.value || 'inherit';
+      hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    group.appendChild(select);
+  }
+
+  group.appendChild(createErrorMsg());
+  return group;
+}
+
+function renderHiddenField(element) {
+  var group = createGroup(element);
+  group.style.display = 'none'; // Hidden on frontend
+  var config = typeof element.config === 'string' ? JSON.parse(element.config) : (element.config || {});
+
+  var hiddenInput = document.createElement('input');
+  hiddenInput.type = 'hidden';
+  hiddenInput.name = propName(element.label);
+  hiddenInput.value = config.value || '';
+
+  group.appendChild(hiddenInput);
+  return group;
 }

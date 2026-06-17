@@ -139,6 +139,20 @@
   padding: 0;
 }
 
+.cap-options-wrapper .cap-horizontal-scroll {
+  flex-wrap: nowrap !important;
+  overflow-x: auto !important;
+  max-width: 100%;
+  padding-bottom: 8px;
+}
+.cap-options-wrapper .cap-horizontal-scroll::-webkit-scrollbar {
+  height: 6px;
+}
+.cap-options-wrapper .cap-horizontal-scroll::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1;
+  border-radius: 4px;
+}
+
 /* ─── Color Swatch ─────────────────────────────────────────────── */
 .cap-options-wrapper .cap-color-swatch {
   width: 32px;

@@ -67,6 +67,7 @@ export default function ElementEditor({ element, allElements = [], onChange, onB
   const isInput = ["Text", "Textarea", "Email", "Phone"].includes(typeStr);
   const isNumber = typeStr === "Number";
   const isStatic = ["Heading", "Paragraph", "HTML", "Divider", "Spacing", "Pop-up Modal"].includes(typeStr);
+  const isSwatchType = ["Color Swatch", "Image Swatch"].includes(typeStr);
   
   const showCartLabel = !isStatic;
   const showRequired = !isStatic;
@@ -432,7 +433,14 @@ export default function ElementEditor({ element, allElements = [], onChange, onB
                 <Box paddingBlockStart="400" paddingBlockEnd="400">
                   <BlockStack gap="400">
                     <Text variant="headingSm" as="h3">{element.type} Content</Text>
-                    <TextField label="Content" value={element.config?.content || ""} onChange={(val) => handleConfigChange("content", val)} multiline={4} autoComplete="off" />
+                    {element.type === "Paragraph" ? (
+                      <ClientRichTextEditor 
+                        value={element.config?.content || ""} 
+                        onChange={(val) => handleConfigChange("content", val)} 
+                      />
+                    ) : (
+                      <TextField label="Content" value={element.config?.content || ""} onChange={(val) => handleConfigChange("content", val)} multiline={4} autoComplete="off" />
+                    )}
                   </BlockStack>
                 </Box>
               )}
@@ -442,16 +450,28 @@ export default function ElementEditor({ element, allElements = [], onChange, onB
                 <Box paddingBlockStart="400" paddingBlockEnd="400">
                   <BlockStack gap="400">
                     <Text variant="headingSm" as="h3">Pop-up Modal Settings</Text>
-                    <Box width="50%">
-                      <TextField 
-                        label="Modal width" 
-                        type="number" 
-                        value={element.config?.modalWidth || "450"} 
-                        onChange={(val) => handleConfigChange("modalWidth", val)} 
-                        suffix="px" 
-                        autoComplete="off" 
-                      />
-                    </Box>
+                    <InlineGrid columns={2} gap="400">
+                      <Box>
+                        <TextField 
+                          label="Modal width" 
+                          value={element.config?.modalWidth !== undefined ? String(element.config.modalWidth) : ""} 
+                          onChange={(val) => handleConfigChange("modalWidth", val)} 
+                          placeholder="auto"
+                          suffix="px" 
+                          autoComplete="off" 
+                        />
+                      </Box>
+                      <Box>
+                        <TextField 
+                          label="Modal height" 
+                          value={element.config?.modalHeight !== undefined ? String(element.config.modalHeight) : ""} 
+                          onChange={(val) => handleConfigChange("modalHeight", val)} 
+                          placeholder="auto"
+                          suffix="px" 
+                          autoComplete="off" 
+                        />
+                      </Box>
+                    </InlineGrid>
                     <Box>
                       <InlineStack align="start" blockAlign="center" gap="200" paddingBlockEnd="100">
                         <Text as="p" variant="bodyMd">Modal content</Text>
@@ -730,6 +750,17 @@ export default function ElementEditor({ element, allElements = [], onChange, onB
                   <Text variant="headingSm" as="h3">Advanced Features (Unlocked)</Text>
 
 
+                  {/* Google Font Selector Display Style */}
+                  {element.type === "Google Font Selector" && (
+                    <Box paddingBlockEnd="400">
+                      <Select 
+                        label="Display Style"
+                        options={["Dropdown", "Swatch"]}
+                        value={element.config?.fontDisplayStyle || "Dropdown"}
+                        onChange={(val) => handleConfigChange("fontDisplayStyle", val)}
+                      />
+                    </Box>
+                  )}
                   
                   {/* Min / Max Characters */}
                   {showMinMaxChars && (
@@ -871,33 +902,9 @@ export default function ElementEditor({ element, allElements = [], onChange, onB
                 </BlockStack>
               )}
 
-              {/* Image Swatch Specific Settings */}
-              {typeStr === "Image Swatch" && (
+              {/* Layout and Dimensions for Swatches & Buttons */}
+              {(isSwatchType || typeStr === "Button") && (
                 <BlockStack gap="400">
-                  <InlineGrid columns={2} gap="400">
-                    <Box>
-                      <TextField
-                        label="Swatch image width"
-                        type="number"
-                        min={1}
-                        value={element.config?.swatchWidth || "50"}
-                        onChange={(val) => handleConfigChange("swatchWidth", val)}
-                        suffix="px"
-                        autoComplete="off"
-                      />
-                    </Box>
-                    <Box>
-                      <TextField
-                        label="Swatch image height"
-                        type="number"
-                        min={1}
-                        value={element.config?.swatchHeight || "50"}
-                        onChange={(val) => handleConfigChange("swatchHeight", val)}
-                        suffix="px"
-                        autoComplete="off"
-                      />
-                    </Box>
-                  </InlineGrid>
                   <Box>
                     <Text as="p" paddingBlockEnd="200">Direction style</Text>
                     <InlineGrid columns={2} gap="400">
@@ -953,6 +960,48 @@ export default function ElementEditor({ element, allElements = [], onChange, onB
                         <div style={{ width: "40px", height: "40px", background: "#f4f6f8", border: "1px solid #c9cccf", borderRadius: "2px" }}></div>
                       </div>
                     </InlineGrid>
+                  </Box>
+                </BlockStack>
+              )}
+
+              {/* Item dimensions and Shape for Swatches, Buttons, and Dropdowns */}
+              {(isSwatchType || typeStr === "Button" || typeStr === "Color Dropdown" || typeStr === "Image Dropdown") && (
+                <BlockStack gap="400">
+                  <Box>
+                    <Text as="p" paddingBlockEnd="200">Item dimensions</Text>
+                    <InlineGrid columns={2} gap="400">
+                      <Box>
+                        <TextField
+                          label="Width"
+                          type="number"
+                          min={1}
+                          value={element.config?.swatchWidth || ""}
+                          onChange={(val) => handleConfigChange("swatchWidth", val)}
+                          suffix="px"
+                          autoComplete="off"
+                        />
+                      </Box>
+                      <Box>
+                        <TextField
+                          label="Height"
+                          type="number"
+                          min={1}
+                          value={element.config?.swatchHeight || ""}
+                          onChange={(val) => handleConfigChange("swatchHeight", val)}
+                          suffix="px"
+                          autoComplete="off"
+                        />
+                      </Box>
+                    </InlineGrid>
+                  </Box>
+
+                  <Box>
+                    <Select
+                      label="Shape"
+                      options={["Square", "Round"]}
+                      value={element.config?.swatchShape || "Square"}
+                      onChange={(val) => handleConfigChange("swatchShape", val)}
+                    />
                   </Box>
                 </BlockStack>
               )}
