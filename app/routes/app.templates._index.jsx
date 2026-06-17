@@ -20,13 +20,112 @@ import prisma from "../db.server";
 import { authenticate } from "../shopify.server";
 
 export const loader = async ({ request }) => {
-  const { session } = await authenticate.admin(request);
+  const { session, admin } = await authenticate.admin(request);
   const optionSets = await prisma.optionSet.findMany({
     where: { shopId: session.shop, status: "TEMPLATE" },
     orderBy: { createdAt: "desc" },
-    include: { elements: true, sections: true }
+    include: { elements: true, sections: true, productRules: true }
   });
-  return { optionSets };
+
+  const targetsToFetch = [];
+  optionSets.forEach(set => {
+    if (set.productRules) {
+      for (const rule of set.productRules) {
+        if (rule.targetType === 'product' || rule.targetType === 'manual') {
+          try {
+            let productId = null;
+            if (rule.targetValues.startsWith('[')) {
+              const values = JSON.parse(rule.targetValues);
+              if (values && values.length > 0) productId = values[0];
+            } else if (rule.targetValues.includes('gid://shopify/Product/')) {
+              productId = rule.targetValues.split(',')[0].trim();
+            }
+            if (productId) {
+              targetsToFetch.push({ setId: set.id, type: 'product', id: productId });
+              break;
+            }
+          } catch (e) {
+            console.error("Failed to parse targetValues:", e);
+          }
+        } else if (rule.targetType === 'collection') {
+          try {
+            let collectionId = null;
+            if (rule.targetValues.startsWith('[')) {
+              const values = JSON.parse(rule.targetValues);
+              if (values && values.length > 0) collectionId = values[0];
+            } else if (rule.targetValues.includes('gid://shopify/Collection/')) {
+              collectionId = rule.targetValues.split(',')[0].trim();
+            }
+            if (collectionId) {
+              targetsToFetch.push({ setId: set.id, type: 'collection', id: collectionId });
+              break;
+            }
+          } catch (e) {
+            console.error("Failed to parse collection ID:", e);
+          }
+        } else if (rule.targetType === 'all' || rule.targetType === 'ALL_PRODUCTS') {
+          targetsToFetch.push({ setId: set.id, type: 'all', id: 'all' });
+          break;
+        }
+      }
+    }
+  });
+
+  const setImages = {};
+  try {
+    if (targetsToFetch.length > 0) {
+      const queryParts = targetsToFetch.slice(0, 50).map((item, idx) => {
+        if (item.type === 'product') {
+          return `
+            target_${idx}: product(id: "${item.id}") {
+              featuredImage { url }
+            }
+          `;
+        } else if (item.type === 'collection') {
+          return `
+            target_${idx}: collection(id: "${item.id}") {
+              image { url }
+            }
+          `;
+        } else if (item.type === 'all') {
+          return `
+            target_${idx}: products(first: 1) {
+              edges { node { featuredImage { url } } }
+            }
+          `;
+        }
+        return '';
+      });
+      
+      if (queryParts.length > 0) {
+        const query = `query { ${queryParts.join('\n')} }`;
+        const response = await admin.graphql(query);
+        const json = await response.json();
+        
+        targetsToFetch.slice(0, 50).forEach((item, idx) => {
+          const result = json.data && json.data[`target_${idx}`];
+          if (result) {
+            if (item.type === 'product' && result.featuredImage) {
+              setImages[item.setId] = result.featuredImage.url;
+            } else if (item.type === 'collection' && result.image) {
+              setImages[item.setId] = result.image.url;
+            } else if (item.type === 'all' && result.edges && result.edges.length > 0 && result.edges[0].node.featuredImage) {
+              setImages[item.setId] = result.edges[0].node.featuredImage.url;
+            }
+          }
+        });
+      }
+    }
+  } catch (error) {
+    console.error("Critical error during GraphQL image fetch:", error);
+  }
+
+  const setsWithImages = optionSets.map(set => ({
+    ...set,
+    imageUrl: setImages[set.id] || null
+  }));
+
+  return { optionSets: setsWithImages };
 };
 
 export const action = async ({ request }) => {
@@ -378,6 +477,7 @@ export default function Templates() {
                     key={optSet.id} 
                     id={optSet.id}
                     title={optSet.name} 
+                    imageUrl={optSet.imageUrl}
                     onClick={() => navigate(`/app/templates/${optSet.id}`)}
                     onExport={exportTemplate}
                   />
