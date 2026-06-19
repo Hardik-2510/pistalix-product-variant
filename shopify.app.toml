@@ -1,6 +1,6 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
-client_id = "a1a53906484ea917b6271fe85a16089b"
+client_id = "07a0a225a28e52758463e6995952b30b"
 application_url = "https://example.com"
 embedded = true
 name = "Varify Product Options Variant"
