@@ -34,6 +34,7 @@ export default function SectionBlock({
   sectionIndex = 0,
   onEditElement,
   onEditStyle,
+  currentTier = "free",
 }) {
   const handleAddOption = useCallback(
     (item) => {
@@ -188,7 +189,7 @@ export default function SectionBlock({
 
             {/* Add Option Button */}
             <Box paddingBlockStart="100">
-              <AddOptionMegaMenu onSelect={handleAddOption} />
+              <AddOptionMegaMenu onSelect={handleAddOption} currentTier={currentTier} />
             </Box>
           </BlockStack>
         </Box>

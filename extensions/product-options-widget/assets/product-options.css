@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════════
-   Pistalix Product Variant — Product Options Widget Stylesheet
+   Varify Product Options Variant — Product Options Widget Stylesheet
 
    ISOLATION STRATEGY: Universal "all: revert" reset on the wrapper.
    This forces every element inside .cap-options-wrapper back to the
@@ -145,9 +145,11 @@
   max-width: 100%;
   padding-bottom: 8px;
 }
+
 .cap-options-wrapper .cap-horizontal-scroll::-webkit-scrollbar {
   height: 6px;
 }
+
 .cap-options-wrapper .cap-horizontal-scroll::-webkit-scrollbar-thumb {
   background-color: #cbd5e1;
   border-radius: 4px;

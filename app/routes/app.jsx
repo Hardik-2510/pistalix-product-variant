@@ -30,6 +30,7 @@ export default function App() {
           <Link to="/app">Home</Link>
           <Link to="/app/option-sets">Option Sets</Link>
           <Link to="/app/templates">Templates</Link>
+          <Link to="/app/pricing">Pricing</Link>
           <Link to="/app/settings">Settings</Link>
           <Link to="/app/contact-us">Contact Us</Link>
         </ui-nav-menu>

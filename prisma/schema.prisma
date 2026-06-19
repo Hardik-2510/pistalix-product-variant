@@ -39,6 +39,13 @@ model Shop {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  // Billing Details
+  subscriptionId     String?   // Shopify GID
+  subscriptionStatus String?   // ACTIVE, CANCELLED, PENDING, EXPIRED
+  planName           String?   // Human readable name from Shopify (e.g. "Basic Plan - Monthly")
+  planTier           String?   // 'free', 'basic', 'pro' 
+  billingInterval    String?   // 'monthly', 'yearly', null
+
   optionSets  OptionSet[]
 }
 

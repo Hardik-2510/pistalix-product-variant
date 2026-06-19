@@ -5,7 +5,9 @@ import {
   Text,
   InlineStack,
   ActionList,
+  Tooltip,
 } from "@shopify/polaris";
+import { useNavigate } from "react-router";
 
 /**
  * Full element categories for the "Add option" mega-menu popover.
@@ -71,7 +73,8 @@ const elementCategories = [
  * AddOptionMegaMenu — A multi-column popover mega-menu for adding
  * template option elements, categorized by type.
  */
-export default function AddOptionMegaMenu({ onSelect }) {
+export default function AddOptionMegaMenu({ onSelect, currentTier = "free" }) {
+  const navigate = useNavigate();
   const [active, setActive] = useState(false);
   const toggleActive = useCallback(() => setActive((prev) => !prev), []);
 
@@ -112,12 +115,47 @@ export default function AddOptionMegaMenu({ onSelect }) {
             actionRole="menuitem"
             sections={elementCategories.map((category) => ({
               title: category.title,
-              items: category.items.map((item) => ({
-                content: item.label,
-                helpText: item.description,
-                prefix: <span style={{ fontSize: "16px", width: "24px", textAlign: "center" }}>{item.icon}</span>,
-                onAction: () => handleSelect(item),
-              })),
+              items: category.items.map((item) => {
+                const isPremium = ["Datetime", "File Upload", "Color Picker", "Color Dropdown", "Image Dropdown", "Color Swatch", "Image Swatch", "Pop-up Modal", "HTML", "Switch", "Tabs"].includes(item.label);
+                const isAdvanced = ["Google Font Selector", "Bundle", "Variant Fetcher"].includes(item.label);
+                
+                const locked = (isPremium && currentTier === "free") || (isAdvanced && (currentTier === "free" || currentTier === "basic"));
+
+                const itemContent = (
+                  <span style={{ color: locked ? "var(--p-color-text-subdued)" : "inherit", display: "inline-flex", alignItems: "center" }}>
+                    {item.label}
+                    {locked && (
+                      <svg viewBox="0 0 20 20" style={{ width: '12px', height: '12px', fill: '#EBB424', marginLeft: '6px' }}>
+                        <path d="M10 1l2.928 5.933 6.549.952-4.738 4.618 1.118 6.523L10 16.035l-5.857 3.078 1.118-6.523L.523 7.885l6.549-.952L10 1z"/>
+                      </svg>
+                    )}
+                  </span>
+                );
+
+                return {
+                  content: locked ? (
+                    <Tooltip
+                      content={
+                        <span>
+                          🔒 This feature is available on <span role="link" tabIndex={0} onClick={(e) => { e.stopPropagation(); navigate("/app/pricing"); }} onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); navigate("/app/pricing"); } }} style={{color: "#2c6ecb", textDecoration: "underline", cursor: "pointer"}}>higher</span> plan.
+                        </span>
+                      }
+                      dismissOnMouseOut={false}
+                    >
+                      {itemContent}
+                    </Tooltip>
+                  ) : itemContent,
+                  helpText: item.description,
+                  prefix: <span style={{ fontSize: "16px", width: "24px", textAlign: "center", opacity: locked ? 0.4 : 1, filter: locked ? "grayscale(100%)" : "none" }}>{item.icon}</span>,
+                  onAction: () => {
+                    if (locked) {
+                      navigate("/app/pricing");
+                      return;
+                    }
+                    handleSelect(item);
+                  },
+                };
+              }),
             }))}
           />
         </div>

@@ -60,7 +60,7 @@ function ClientRichTextEditor({ value, onChange }) {
  * ElementEditor — Detailed configuration form for a single template element.
  * Matches the Globo Product Options builder UI.
  */
-export default function ElementEditor({ element, allElements = [], onChange, onBack, onDelete }) {
+export default function ElementEditor({ element, allElements = [], onChange, onBack, onDelete, hasConditionalLogic = true }) {
   const [selectedTab, setSelectedTab] = useState(0);
 
   const typeStr = element.type || "";
@@ -212,16 +212,23 @@ export default function ElementEditor({ element, allElements = [], onChange, onB
                 </InlineStack>
               )}
 
-              <Checkbox
-                label="Conditional logic (Show this field when...)"
-                checked={element.config?.conditionalLogic || false}
-                onChange={(val) => handleConfigChange("conditionalLogic", val)}
-              />
-
-              {element.config?.conditionalLogic && (
-                <Box paddingBlockStart="400">
-                  <ConditionalLogicEditor element={element} allElements={allElements} onUpdate={onChange} />
-                </Box>
+              {hasConditionalLogic ? (
+                <>
+                  <Checkbox
+                    label="Conditional logic (Show this field when...)"
+                    checked={element.config?.conditionalLogic || false}
+                    onChange={(val) => handleConfigChange("conditionalLogic", val)}
+                  />
+                  {element.config?.conditionalLogic && (
+                    <Box paddingBlockStart="400">
+                      <ConditionalLogicEditor element={element} allElements={allElements} onUpdate={onChange} />
+                    </Box>
+                  )}
+                </>
+              ) : (
+                <Banner tone="warning" title="Pro Feature">
+                  <p>Conditional logic requires the Pro plan. <a href="/app/pricing">Upgrade now</a></p>
+                </Banner>
               )}
 
               <Checkbox

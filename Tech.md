@@ -1,6 +1,6 @@
-# Pistalix Product Variant - Technical Documentation
+# Varify Product Options Variant - Technical Documentation
 
-This document outlines the architecture, tech stack, and core technical flows of the Pistalix Product Variant Shopify application, superseding the default generic template documentation.
+This document outlines the architecture, tech stack, and core technical flows of the Varify Product Options Variant Shopify application, superseding the default generic template documentation.
 
 ## 1. Tech Stack
 - **Framework:** React Router v7 (Full-stack routing, loaders, and server actions)
@@ -27,7 +27,7 @@ The template builder is a deeply interactive React application that allows merch
 
 ## 3. Storefront Delivery Strategy: Metafields Sync
 
-To ensure maximum performance and zero-latency rendering on the storefront, Pistalix Product Variant does **not** rely on App Proxies or direct API calls to fetch options on the product page. Instead, it uses a highly efficient **Metafield Sync Architecture**.
+To ensure maximum performance and zero-latency rendering on the storefront, Varify Product Options Variant does **not** rely on App Proxies or direct API calls to fetch options on the product page. Instead, it uses a highly efficient **Metafield Sync Architecture**.
 
 When a merchant saves an Option Set in the Admin dashboard, the `syncOptionSetToMetafields` logic (`app/lib/metafields.server.js`) automatically triggers:
 

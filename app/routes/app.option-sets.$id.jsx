@@ -5,6 +5,7 @@ import prisma from "../db.server";
 import crypto from "crypto";
 import OptionSetBuilder from "../components/OptionSetBuilder";
 import { syncOptionSetToMetafields, clearOptionSetMetafields } from "../lib/metafields.server";
+import { requireFeature } from "../lib/features.server";
 
 /**
  * Loader — fetches existing option set with all elements and product rules.
@@ -24,7 +25,11 @@ export const loader = async ({ request, params }) => {
     throw new Response("Not found", { status: 404 });
   }
 
-  return { optionSet };
+  const hasConditionalLogic = await requireFeature(session.shop, "conditionalLogic");
+  const shop = await prisma.shop.findUnique({ where: { shopDomain: session.shop } });
+  const currentTier = shop?.planTier || "free";
+
+  return { optionSet, hasConditionalLogic, currentTier };
 };
 
 /**
@@ -305,6 +310,6 @@ export const action = async ({ request, params }) => {
  * Uses the shared OptionSetBuilder component with pre-loaded data.
  */
 export default function OptionSetEdit() {
-  const { optionSet } = useLoaderData();
-  return <OptionSetBuilder initialData={optionSet} isEdit={true} />;
+  const { optionSet, hasConditionalLogic, currentTier } = useLoaderData();
+  return <OptionSetBuilder initialData={optionSet} isEdit={true} hasConditionalLogic={hasConditionalLogic} currentTier={currentTier} />;
 }

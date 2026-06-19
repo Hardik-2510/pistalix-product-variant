@@ -24,7 +24,7 @@ import ElementEditor from "./ElementEditor";
 import ProductRuleBuilder from "./ProductRuleBuilder";
 
 // eslint-disable-next-line react/prop-types
-export default function OptionSetBuilder({ initialData = null }) {
+export default function OptionSetBuilder({ initialData = null, currentTier = "free" }) {
   const navigate = useNavigate();
   const fetcher = useFetcher();
   const isSaving = fetcher.state !== "idle";
@@ -506,6 +506,7 @@ export default function OptionSetBuilder({ initialData = null }) {
                             onToggleCollapse={handleToggleCollapse}
                             isCollapsed={section.collapsed}
                             onEditElement={setActiveElementId}
+                            currentTier={currentTier}
                           />
                         ))}
                       </BlockStack>

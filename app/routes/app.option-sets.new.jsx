@@ -3,6 +3,7 @@ import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import OptionSetBuilder from "../components/OptionSetBuilder";
 import { syncOptionSetToMetafields } from "../lib/metafields.server";
+import { requireFeature, getFeatureLimit } from "../lib/features.server";
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
@@ -24,7 +25,11 @@ export const loader = async ({ request }) => {
     }
   }
   
-  return { template: null };
+  const hasConditionalLogic = await requireFeature(session.shop, "conditionalLogic");
+  const shop = await prisma.shop.findUnique({ where: { shopDomain: session.shop } });
+  const currentTier = shop?.planTier || "free";
+  
+  return { template: null, hasConditionalLogic, currentTier };
 };
 
 /**
@@ -38,6 +43,14 @@ export const action = async ({ request }) => {
   const actionType = formData.get("_action");
 
   if (actionType === "save") {
+    // Check Option Sets limit
+    const optionSetCount = await prisma.optionSet.count({ where: { shopId: session.shop } });
+    const maxOptionSets = await getFeatureLimit(session.shop, "maxOptionSets");
+
+    if (maxOptionSets !== Infinity && optionSetCount >= maxOptionSets) {
+      return { error: `You have reached your plan limit of ${maxOptionSets} option sets. Please upgrade to create more.` };
+    }
+
     const name = formData.get("name") || "New Option Set";
     const status = formData.get("status") || "active";
 
@@ -183,6 +196,6 @@ export const action = async ({ request }) => {
  * Uses the shared OptionSetBuilder component with no initial data.
  */
 export default function OptionSetNew() {
-  const { template } = useLoaderData();
-  return <OptionSetBuilder initialData={template} isEdit={false} />;
+  const { template, hasConditionalLogic, currentTier } = useLoaderData();
+  return <OptionSetBuilder initialData={template} isEdit={false} hasConditionalLogic={hasConditionalLogic} currentTier={currentTier} />;
 }
