@@ -22,7 +22,6 @@ import {
   Banner,
   RangeSlider,
   Checkbox,
-  Modal,
 } from "@shopify/polaris";
 import english from "@shopify/polaris/locales/en.json";
 import {
@@ -199,104 +198,11 @@ export async function action({ request }) {
   }
 }
 
-const DEFAULT_SETTINGS = {
-  "alignment": "left",
-  "position": "Below product variants",
-  "customSelector": ".product__description",
-  "filePreview": "Show image if the uploaded file is a photo, otherwise show link",
-  "colors": {
-    "appBackground": "#f7f9fc",
-    "labelText": "#000000",
-    "requiredCharacter": "#ff0000",
-    "helpText": "#737373",
-    "totalText": "#202223",
-    "totalTextMoney": "#008000",
-    "inputText": "#000000",
-    "inputBorder": "#9a9a9a",
-    "inputBackground": "#ffffff",
-    "switchBackground": "#dddddd",
-    "switchActiveBackground": "#ea1255",
-    "rangeSliderThumb": "#121212",
-    "rangeSliderBackground": "#dddddd",
-    "rangeSliderActiveBackground": "#121212",
-    "dropdownText": "#000000",
-    "dropdownBorder": "#000000",
-    "dropdownBackground": "#ffffff",
-    "dropdownSelected": "#f8e0e6",
-    "checkboxRadioText": "#000000",
-    "checkboxRadioTextHover": "#000000",
-    "checkboxRadioTextActive": "#000000",
-    "checkboxRadioHover": "#eb1256",
-    "checkboxRadioActive": "#eb1256",
-    "buttonText": "#000000",
-    "buttonTextHover": "#000000",
-    "buttonTextActive": "#000000",
-    "buttonBackground": "#ffffff",
-    "buttonBackgroundHover": "#ffffff",
-    "buttonBackgroundActive": "#eb1256",
-    "groupLabel": "#000000",
-    "swatchBorder": "#000000",
-    "tabTitle": "#71717a",
-    "tabTitleActive": "#212B36",
-    "tabTitleHover": "#212B36",
-    "tabContent": "#212B36",
-    "tabBorder": "#e1e1e1",
-    "groupIcon": "#121212",
-    "groupChevron": "#121212",
-    "swatchBorderHover": "#dddddd",
-    "swatchBorderActive": "#eb1256"
-  },
-  "borders": {
-    "inputSize": 1,
-    "inputRadius": 2,
-    "dropdownSize": 1,
-    "dropdownRadius": 2,
-    "swatchSize": 1,
-    "swatchRadius": 2
-  },
-  "typography": {
-    "labelCustom": false,
-    "labelFont": "BlackOpsOne",
-    "labelSize": 12,
-    "mainCustom": false,
-    "mainFont": "Open Sans",
-    "mainSize": 12,
-    "helpCustom": false,
-    "helpFont": "Roboto",
-    "helpSize": 12,
-    "addonCustom": false,
-    "addonFont": "Open Sans",
-    "addonSize": 12
-  },
-  "toggleStates": {
-    "tooltip": true,
-    "displayValue": true,
-    "limitHeight": false,
-    "collectionQuickview": true,
-    "goToCart": false,
-    "autoScroll": true,
-    "hideQuantity": true,
-    "showEditOptions": false,
-    "homePageWidget": true,
-    "regularPageWidget": true,
-    "showAddonForInputs": true,
-    "showAddonForOptions": true,
-    "showAddonMessage": true,
-    "addAddonPriceToProductPrice": true,
-    "mergeMainProductAndAddonProducts": false
-  },
-  "addonMoneyFormat": "Without currency",
-  "addonLabelFormat": "(+ {{addon}})",
-  "customFonts": []
-};
-
 export default function Settings() {
   const { settings, shopId } = useLoaderData();
   const submit = useSubmit();
   const navigation = useNavigation();
   const isSaving = navigation.state === "submitting";
-
-  const [resetModalOpen, setResetModalOpen] = useState(false);
 
   const [topTab, setTopTab] = useState(0);
   const [settingsTab, setSettingsTab] = useState(0);
@@ -406,24 +312,6 @@ export default function Settings() {
   ];
 
   const fileInputRef = useRef(null);
-
-  const handleReset = () => {
-    setAlignment(DEFAULT_SETTINGS.alignment);
-    setPosition(DEFAULT_SETTINGS.position);
-    setCustomSelector(DEFAULT_SETTINGS.customSelector);
-    setFilePreview(DEFAULT_SETTINGS.filePreview);
-    setColors({ ...colors, ...DEFAULT_SETTINGS.colors });
-    setBorders({ ...borders, ...DEFAULT_SETTINGS.borders });
-    setTypography({ ...typography, ...DEFAULT_SETTINGS.typography });
-    setToggleStates({ ...toggleStates, ...DEFAULT_SETTINGS.toggleStates });
-    setAddonMoneyFormat(DEFAULT_SETTINGS.addonMoneyFormat);
-    setAddonLabelFormat(DEFAULT_SETTINGS.addonLabelFormat);
-    setCustomFonts(DEFAULT_SETTINGS.customFonts);
-    setResetModalOpen(false);
-    if (typeof shopify !== 'undefined' && shopify.toast) {
-      shopify.toast.show("Settings reset to defaults. Click Save to apply.");
-    }
-  };
 
   const handleExport = () => {
     const payload = {
@@ -1227,7 +1115,6 @@ export default function Settings() {
           loading: isSaving,
         }}
         secondaryActions={topTab === 0 ? [
-          { content: "Reset", onAction: () => setResetModalOpen(true) },
           { content: "Export settings", onAction: handleExport },
           { content: "Import settings", onAction: () => fileInputRef.current?.click() },
         ] : undefined}
@@ -1242,28 +1129,6 @@ export default function Settings() {
             {mainContent}
           </Box>
         </Tabs>
-        <Modal
-          open={resetModalOpen}
-          onClose={() => setResetModalOpen(false)}
-          title="Reset to default settings?"
-          primaryAction={{
-            content: 'Reset',
-            destructive: true,
-            onAction: handleReset,
-          }}
-          secondaryActions={[
-            {
-              content: 'Cancel',
-              onAction: () => setResetModalOpen(false),
-            },
-          ]}
-        >
-          <Modal.Section>
-            <Text as="p">
-              Are you sure you want to reset all settings to their defaults? Your current settings will be lost unless you have exported them.
-            </Text>
-          </Modal.Section>
-        </Modal>
       </Page>
     </AppProvider>
   );
