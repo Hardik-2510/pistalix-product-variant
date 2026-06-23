@@ -22,6 +22,7 @@ import SectionBlock from "./SectionBlock";
 import TemplateBuilderPreview from "./TemplateBuilderPreview";
 import ElementEditor from "./ElementEditor";
 import ProductRuleBuilder from "./ProductRuleBuilder";
+import { useUnsavedChanges } from "../hooks/useUnsavedChanges";
 
 // eslint-disable-next-line react/prop-types
 export default function OptionSetBuilder({ initialData = null, currentTier = "free" }) {
@@ -114,18 +115,42 @@ export default function OptionSetBuilder({ initialData = null, currentTier = "fr
     }
   }, [initialData]);
 
+  const currentState = JSON.stringify({ name, status, sections, elements, productRules });
+  const [initialStateStr, setInitialStateStr] = useState(currentState);
+  const isDirty = currentState !== initialStateStr;
+
+  useUnsavedChanges(isDirty);
+
+  useEffect(() => {
+    if (fetcher.state === "idle" && fetcher.data && !fetcher.data.error) {
+      setInitialStateStr(currentState);
+    }
+  }, [fetcher.state, fetcher.data, currentState]);
+
   // Header menu states
   const [langPopoverActive, setLangPopoverActive] = useState(false);
   const [menuPopoverActive, setMenuPopoverActive] = useState(false);
 
   // ─── Section Management ─────────────────────────────────────────────
   const handleAddSection = useCallback(() => {
+    const maxSections = currentTier === "premium" ? Infinity : (currentTier === "standard" ? 3 : 1);
+    if (sections.length >= maxSections) {
+      if (typeof shopify !== 'undefined' && shopify.toast) {
+        shopify.toast.show(`Your plan limits you to ${maxSections} section${maxSections > 1 ? 's' : ''}. Upgrade to Premium for unlimited sections.`, { isError: true });
+      } else {
+        setToastMessage(`Your plan limits you to ${maxSections} section${maxSections > 1 ? 's' : ''}. Upgrade to Premium for unlimited sections.`);
+        setToastError(true);
+        setToastActive(true);
+      }
+      return;
+    }
+
     const newSection = {
       id: `section-${Date.now()}`,
       collapsed: false,
     };
     setSections((prev) => [...prev, newSection]);
-  }, []);
+  }, [currentTier, sections.length]);
 
   const handleDeleteSection = useCallback((sectionId) => {
     setSections((prev) => prev.filter((s) => s.id !== sectionId));
@@ -173,6 +198,18 @@ export default function OptionSetBuilder({ initialData = null, currentTier = "fr
   }, []);
 
   const handleDuplicateSection = useCallback((sectionId) => {
+    const maxSections = currentTier === "premium" ? Infinity : (currentTier === "standard" ? 3 : 1);
+    if (sections.length >= maxSections) {
+      if (typeof shopify !== 'undefined' && shopify.toast) {
+        shopify.toast.show(`Your plan limits you to ${maxSections} section${maxSections > 1 ? 's' : ''}. Upgrade to Premium for unlimited sections.`, { isError: true });
+      } else {
+        setToastMessage(`Your plan limits you to ${maxSections} section${maxSections > 1 ? 's' : ''}. Upgrade to Premium for unlimited sections.`);
+        setToastError(true);
+        setToastActive(true);
+      }
+      return;
+    }
+
     const sectionIndex = sections.findIndex(s => s.id === sectionId);
     if (sectionIndex === -1) return;
     const originalSection = sections[sectionIndex];
@@ -194,7 +231,7 @@ export default function OptionSetBuilder({ initialData = null, currentTier = "fr
       }));
       return [...prev, ...newElements];
     });
-  }, [sections]);
+  }, [currentTier, sections]);
 
   const handleDuplicateElement = useCallback((elementId) => {
     const elementIndex = elements.findIndex(el => el.id === elementId);
@@ -347,6 +384,14 @@ export default function OptionSetBuilder({ initialData = null, currentTier = "fr
       setSections([{ id: "section-1", collapsed: false }]);
       setProductRules([]);
     }
+    // Also reset initial state string so it's not marked dirty
+    setInitialStateStr(JSON.stringify({
+      name: initialData ? initialData.name : "New Option Set",
+      status: initialData ? initialData.status : "active",
+      sections: initialData?.sections ? initialData.sections : [{ id: "section-1", collapsed: false }],
+      elements: initialData?.elements ? initialData.elements : [],
+      productRules: initialData?.productRules ? initialData.productRules : []
+    }));
   }, [initialData]);
 
   // ─── Render ─────────────────────────────────────────────────────────
@@ -452,6 +497,7 @@ export default function OptionSetBuilder({ initialData = null, currentTier = "fr
               onChange={handleUpdateElement}
               onBack={() => setActiveElementId(null)}
               onDelete={handleDeleteElement}
+              currentTier={currentTier}
             />
           ) : (
             <Card padding="0">
@@ -516,7 +562,7 @@ export default function OptionSetBuilder({ initialData = null, currentTier = "fr
                         <InlineStack gap="200" blockAlign="center">
                           <Text as="span" fontWeight="semibold">📄</Text>
                           <Text as="span" fontWeight="medium">
-                            Add section
+                            Add section {currentTier !== "premium" ? "⭐" : ""}
                           </Text>
                         </InlineStack>
                       </Button>

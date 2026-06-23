@@ -4,7 +4,7 @@ let content = fs.readFileSync('h:/PistaLix/pistalix-globo/extensions/product-opt
 const helpersReplacement = `
 var capConfig = {
   basePrice: 0,
-  moneyFormat: '${{amount}}',
+  moneyFormat: '$' + '{{amount}}',
   priceElements: []
 };
 
@@ -14,7 +14,7 @@ function formatMoney(cents, format) {
   if (typeof cents === 'string') cents = cents.replace('.', '');
   var value = '';
   var placeholderRegex = /\\{\\{\\s*(\\w+)\\s*\\}\\}/;
-  var formatString = format || '${{amount}}';
+  var formatString = format || '$' + '{{amount}}';
   
   function defaultTo(val, def) {
     return val == null || val !== val ? def : val;
@@ -104,7 +104,7 @@ function updateTotalPrice() {
 
 function initPriceTracking(container) {
   capConfig.basePrice = parseInt(container.getAttribute('data-product-price') || '0', 10);
-  capConfig.moneyFormat = container.getAttribute('data-money-format') || '${{amount}}';
+  capConfig.moneyFormat = container.getAttribute('data-money-format') || '$' + '{{amount}}';
   
   var selectors = [
     '.price-item--regular',

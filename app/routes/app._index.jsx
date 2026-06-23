@@ -79,7 +79,7 @@ export default function Index() {
           <Layout.Section>
             <BlockStack gap="500">
               <CalloutCard
-                title="Welcome to Pistalix Options"
+                title="Welcome to Varify Product Option Variants"
                 illustration="https://cdn.shopify.com/s/assets/admin/checkout/settings-customizecart-705f57c725ac05be5a34ec20c05b94298cb8afd100f26b56d0081a3e8d5f80d5.svg"
                 primaryAction={{
                   content: "Create option set",

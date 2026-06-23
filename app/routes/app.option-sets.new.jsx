@@ -3,7 +3,8 @@ import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import OptionSetBuilder from "../components/OptionSetBuilder";
 import { syncOptionSetToMetafields } from "../lib/metafields.server";
-import { requireFeature, getFeatureLimit } from "../lib/features.server";
+import { getShopFeatures, validateOptionSetLimit } from "../lib/features.server";
+import process from "process";
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
@@ -24,12 +25,25 @@ export const loader = async ({ request }) => {
       return { template };
     }
   }
+
+  const predefinedId = url.searchParams.get("predefinedId");
+  if (predefinedId) {
+    const fs = await import("fs");
+    const path = await import("path");
+    let predefinedTemplates = [];
+    try { predefinedTemplates = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'app', 'lib', 'predefinedTemplates.json'), 'utf-8')); } catch(e){ /* ignore */ }
+    let personalizedTemplates = [];
+    try { personalizedTemplates = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'app', 'lib', 'personalizedTemplates.json'), 'utf-8')); } catch(e){ /* ignore */ }
+
+    const template = predefinedTemplates.find(t => t.id === predefinedId) || personalizedTemplates.find(t => t.id === predefinedId);
+    if (template) {
+      return { template };
+    }
+  }
   
-  const hasConditionalLogic = await requireFeature(session.shop, "conditionalLogic");
-  const shop = await prisma.shop.findUnique({ where: { shopDomain: session.shop } });
-  const currentTier = shop?.planTier || "free";
+  const { tier: currentTier, features } = await getShopFeatures(session.shop);
   
-  return { template: null, hasConditionalLogic, currentTier };
+  return { template: null, currentTier, features };
 };
 
 /**
@@ -43,12 +57,10 @@ export const action = async ({ request }) => {
   const actionType = formData.get("_action");
 
   if (actionType === "save") {
-    // Check Option Sets limit
-    const optionSetCount = await prisma.optionSet.count({ where: { shopId: session.shop } });
-    const maxOptionSets = await getFeatureLimit(session.shop, "maxOptionSets");
-
-    if (maxOptionSets !== Infinity && optionSetCount >= maxOptionSets) {
-      return { error: `You have reached your plan limit of ${maxOptionSets} option sets. Please upgrade to create more.` };
+    // Check combined option-set + template limit
+    const limitCheck = await validateOptionSetLimit(session.shop);
+    if (!limitCheck.allowed) {
+      return { error: `You have reached your plan limit of ${limitCheck.limit} option sets & templates (currently using ${limitCheck.current}). Please upgrade to create more.` };
     }
 
     const name = formData.get("name") || "New Option Set";
@@ -67,6 +79,12 @@ export const action = async ({ request }) => {
     try {
       parsedSections = JSON.parse(formData.get("sections") || "[]");
     } catch { parsedSections = []; }
+
+    const { features } = await getShopFeatures(session.shop);
+    const maxSections = features.maxSectionsPerOptionSet || 1;
+    if (parsedSections.length > maxSections) {
+      return { error: `Your plan limits you to ${maxSections} section${maxSections > 1 ? 's' : ''} per option set. Please upgrade to Premium for unlimited sections.` };
+    }
 
     try {
       const optionSet = await prisma.$transaction(async (tx) => {
@@ -196,6 +214,6 @@ export const action = async ({ request }) => {
  * Uses the shared OptionSetBuilder component with no initial data.
  */
 export default function OptionSetNew() {
-  const { template, hasConditionalLogic, currentTier } = useLoaderData();
-  return <OptionSetBuilder initialData={template} isEdit={false} hasConditionalLogic={hasConditionalLogic} currentTier={currentTier} />;
+  const { template, currentTier } = useLoaderData();
+  return <OptionSetBuilder initialData={template} isEdit={false} hasConditionalLogic={true} currentTier={currentTier} />;
 }

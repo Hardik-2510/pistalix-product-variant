@@ -226,6 +226,9 @@ export default function ElementRenderer({ element, value, onChange }) {
             onChange={handleTextChange}
             autoComplete="off"
             maxLength={isTextLike && maxL ? maxL : undefined}
+            minLength={isTextLike && config.minCharacter ? config.minCharacter : undefined}
+            min={typeStr === "number" && config.minValue !== undefined && config.minValue !== "" ? config.minValue : undefined}
+            max={typeStr === "number" && config.maxValue !== undefined && config.maxValue !== "" ? config.maxValue : undefined}
             prefix={config.prefixType === "Text" && config.prefixText ? config.prefixText : undefined}
             suffix={config.suffix ? config.suffix : undefined}
             helpText={config.helpText && config.helpTextPosition !== "Tooltip" ? config.helpText : undefined}
@@ -269,40 +272,77 @@ export default function ElementRenderer({ element, value, onChange }) {
     }
 
     case "dropdown": {
-      const selectedOption = optionsList.find((o, i) => (o.id || o.value || o.label || String(i)) === activeValue) || (activeValue === "" ? null : optionsList[0]);
+      const currentValues = Array.isArray(activeValue) ? activeValue : (activeValue ? [activeValue] : []);
+      const selectedOption = !config.allowMultiple ? (optionsList.find((o, i) => (o.id || o.value || o.label || String(i)) === activeValue) || (activeValue === "" ? null : optionsList[0])) : null;
       const addonText = selectedOption ? getAddOnText(selectedOption) : "";
+
+      const buttonLabel = config.allowMultiple 
+        ? (currentValues.length ? `${currentValues.length} selected` : `Select ${label}...`)
+        : (selectedOption ? `${selectedOption.label || selectedOption.value}` : `Select ${label}...`);
+
+      const activator = (
+        <Button onClick={togglePopoverActive} disclosure fullWidth textAlign="left">
+          <span>{buttonLabel}</span>
+        </Button>
+      );
 
       return (
         <Box>
-          <Box paddingBlockEnd="100">{renderLabelContent(` ${addonText}`)}</Box>
-          {selectedOption && (
+          <Box paddingBlockEnd="100">{renderLabelContent(config.allowMultiple ? "" : ` ${addonText}`)}</Box>
+          {selectedOption && !config.allowMultiple && (
              <Text as="p" variant="bodySm" tone="subdued" paddingBlockEnd="100">
                 {selectedOption.label || selectedOption.value || ""}
              </Text>
           )}
-          {!selectedOption && <Box paddingBlockEnd="100" />}
-          <Select
-            label=""
-            labelHidden
-            options={[
-              { label: `Select ${label}...`, value: "" },
-              ...optionsList.map((o, i) => ({ label: `${o.label}${getAddOnText(o)}`, value: o.id || o.value || o.label || String(i) })),
-            ]}
-            value={activeValue || ""}
-            onChange={handleSelectChange}
-          />
+          {!selectedOption && !config.allowMultiple && <Box paddingBlockEnd="100" />}
+          
+          {config.allowMultiple ? (
+            <Popover
+              active={popoverActive}
+              activator={activator}
+              onClose={() => setPopoverActive(false)}
+              fullWidth
+            >
+              <ActionList
+                actionRole="menuitem"
+                items={optionsList.map((o, i) => {
+                  const val = o.id || o.value || o.label || String(i);
+                  return {
+                    content: `${o.label || o.value}${getAddOnText(o)}`,
+                    active: currentValues.includes(val),
+                    onAction: () => { 
+                      if (currentValues.includes(val)) handleSelectChange(currentValues.filter(v => v !== val));
+                      else handleSelectChange([...currentValues, val]);
+                    }
+                  };
+                })}
+              />
+            </Popover>
+          ) : (
+            <Select
+              label=""
+              labelHidden
+              options={[
+                { label: `Select ${label}...`, value: "" },
+                ...optionsList.map((o, i) => ({ label: `${o.label}${getAddOnText(o)}`, value: o.id || o.value || o.label || String(i) })),
+              ]}
+              value={activeValue || ""}
+              onChange={handleSelectChange}
+            />
+          )}
           {renderHelpText()}
         </Box>
       );
     }
 
     case "image dropdown": {
-      const selectedOption = optionsList.find((o, i) => (o.id || o.value || o.label || String(i)) === activeValue) || optionsList[0];
+      const currentValues = Array.isArray(activeValue) ? activeValue : (activeValue ? [activeValue] : []);
+      const selectedOption = !config.allowMultiple ? (optionsList.find((o, i) => (o.id || o.value || o.label || String(i)) === activeValue) || optionsList[0]) : null;
       const addonText = selectedOption ? getAddOnText(selectedOption) : "";
       
-      const buttonLabel = selectedOption 
-        ? `${selectedOption.label || selectedOption.value}`
-        : `Select ${label}...`;
+      const buttonLabel = config.allowMultiple 
+        ? (currentValues.length ? `${currentValues.length} selected` : `Select ${label}...`)
+        : (selectedOption ? `${selectedOption.label || selectedOption.value}` : `Select ${label}...`);
         
       const activator = (
         <Button onClick={togglePopoverActive} disclosure fullWidth textAlign="left">
@@ -343,7 +383,16 @@ export default function ElementRenderer({ element, value, onChange }) {
                      const val = o.id || o.value || o.label || String(i);
                      return {
                        content: `${o.label || o.value}${getAddOnText(o)}`,
-                       onAction: () => { handleSelectChange(val); setPopoverActive(false); },
+                       active: config.allowMultiple ? currentValues.includes(val) : undefined,
+                       onAction: () => { 
+                         if (config.allowMultiple) {
+                           if (currentValues.includes(val)) handleSelectChange(currentValues.filter(v => v !== val));
+                           else handleSelectChange([...currentValues, val]);
+                         } else {
+                           handleSelectChange(val); 
+                           setPopoverActive(false); 
+                         }
+                       },
                        prefix: o.image ? <img src={o.image} alt="" style={{width: 24, height: 24, objectFit: "cover", borderRadius: 4, border: "1px solid var(--p-color-border-disabled)"}} /> : null
                      };
                    })}
@@ -358,12 +407,13 @@ export default function ElementRenderer({ element, value, onChange }) {
     }
 
     case "color dropdown": {
-      const selectedOption = optionsList.find((o, i) => (o.id || o.value || o.label || String(i)) === activeValue) || optionsList[0];
+      const currentValues = Array.isArray(activeValue) ? activeValue : (activeValue ? [activeValue] : []);
+      const selectedOption = !config.allowMultiple ? (optionsList.find((o, i) => (o.id || o.value || o.label || String(i)) === activeValue) || optionsList[0]) : null;
       const addonText = selectedOption ? getAddOnText(selectedOption) : "";
       
-      const buttonLabel = selectedOption 
-        ? `${selectedOption.label || selectedOption.color || selectedOption.value}`
-        : `Select ${label}...`;
+      const buttonLabel = config.allowMultiple 
+        ? (currentValues.length ? `${currentValues.length} selected` : `Select ${label}...`)
+        : (selectedOption ? `${selectedOption.label || selectedOption.color || selectedOption.value}` : `Select ${label}...`);
         
       const previewW = parseInt(config.swatchWidth || 50);
       const previewH = parseInt(config.swatchHeight || 50);
@@ -404,7 +454,16 @@ export default function ElementRenderer({ element, value, onChange }) {
                  const val = o.id || o.value || o.label || String(i);
                  return {
                    content: `${o.label || o.color || o.value}${getAddOnText(o)}`,
-                   onAction: () => { handleSelectChange(val); setPopoverActive(false); },
+                   active: config.allowMultiple ? currentValues.includes(val) : undefined,
+                   onAction: () => { 
+                     if (config.allowMultiple) {
+                       if (currentValues.includes(val)) handleSelectChange(currentValues.filter(v => v !== val));
+                       else handleSelectChange([...currentValues, val]);
+                     } else {
+                       handleSelectChange(val); 
+                       setPopoverActive(false); 
+                     }
+                   },
                    prefix: <div style={{width: previewW, height: previewH, backgroundColor: o.color || "#000", borderRadius: previewRadius, border: "1px solid var(--p-color-border)"}} />
                  };
                })}

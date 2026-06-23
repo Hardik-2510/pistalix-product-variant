@@ -14,6 +14,7 @@ const shopify = shopifyApp({
   apiVersion: ApiVersion.October25,
   scopes: process.env.SCOPES?.split(","),
   appUrl: process.env.SHOPIFY_APP_URL || "",
+  isEmbeddedApp: true,
   authPathPrefix: "/auth",
   sessionStorage: new PrismaSessionStorage(prisma),
   distribution: AppDistribution.AppStore,

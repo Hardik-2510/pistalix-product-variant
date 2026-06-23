@@ -1,40 +1,83 @@
 import prisma from "../db.server";
 
+// ─── Plan Configuration ──────────────────────────────────────────────
+// Basic (Free) / Standard ($4.99) / Premium ($9.99)
+// ─────────────────────────────────────────────────────────────────────
 export const PLANS = {
-  free: {
-    name: "Free Tier",
-    price: 0,
-    features: {
-      maxOptionSets: 2,
-      optionTypes: "Standard (6+ types)",
-      conditionalLogic: true,
-      customBranding: false,
-      support: "email"
-    }
-  },
   basic: {
     name: "Basic Plan",
-    price: 9.99,
+    price: 0,
     features: {
-      maxOptionSets: 10,
-      optionTypes: "Standard (6+ types)",
-      conditionalLogic: true,
-      customBranding: false,
-      support: "email"
+      maxOptionSetsAndTemplates: 3,
+      maxSectionsPerOptionSet: 1,
+      advancedFeatures: false,
+      advancedSettings: false,
+      customFontFeature: false,
+      productPageFeature: false,
+      colorGeneral: true,
+      colorAdvanced: false,   // Single Input, Choices, Tabs, Groups
+      typography: false,
     }
   },
-  pro: {
-    name: "Pro Plan",
-    price: 29.99,
+  standard: {
+    name: "Standard Plan",
+    price: 4.99,
     features: {
-      maxOptionSets: Infinity, // Unlimited
-      optionTypes: "All Types + Custom Fonts",
-      conditionalLogic: true,
-      customBranding: true,
-      support: "priority"
+      maxOptionSetsAndTemplates: 5,
+      maxSectionsPerOptionSet: 3,
+      advancedFeatures: true,
+      advancedSettings: false,
+      customFontFeature: false,
+      productPageFeature: true,
+      colorGeneral: true,
+      colorAdvanced: true,
+      typography: false,
+    }
+  },
+  premium: {
+    name: "Premium Plan",
+    price: 9.99,
+    features: {
+      maxOptionSetsAndTemplates: Infinity,
+      maxSectionsPerOptionSet: Infinity,
+      advancedFeatures: true,
+      advancedSettings: true,
+      customFontFeature: true,
+      productPageFeature: true,
+      colorGeneral: true,
+      colorAdvanced: true,
+      typography: true,
     }
   }
 };
+
+// Tier hierarchy for comparison (higher index = higher tier)
+const TIER_ORDER = ["basic", "standard", "premium"];
+
+/**
+ * Check if a tier meets a required minimum tier.
+ * e.g. meetsMinimumTier("basic", "standard") → false
+ *      meetsMinimumTier("premium", "standard") → true
+ */
+export function meetsMinimumTier(currentTier, requiredTier) {
+  const currentIdx = TIER_ORDER.indexOf(currentTier || "basic");
+  const requiredIdx = TIER_ORDER.indexOf(requiredTier || "basic");
+  return currentIdx >= requiredIdx;
+}
+
+/**
+ * Get the minimum tier required for a given feature.
+ * Returns "basic", "standard", or "premium".
+ */
+export function getRequiredTierForFeature(featureName) {
+  for (const tier of TIER_ORDER) {
+    const val = PLANS[tier].features[featureName];
+    if (val === true || val === Infinity || (typeof val === "number" && val > 0)) {
+      return tier;
+    }
+  }
+  return "premium"; // default fallback
+}
 
 const getInterval = (interval) => {
   return interval === "yearly" ? "ANNUAL" : "EVERY_30_DAYS";
@@ -44,8 +87,8 @@ export async function switchPlan(admin, tier, interval, shop) {
   const plan = PLANS[tier];
   if (!plan) throw new Error("Invalid plan tier");
 
-  if (tier === "free") {
-    // If downgrading to free, Shopify doesn't need billing approval.
+  if (tier === "basic") {
+    // If downgrading to free (basic), Shopify doesn't need billing approval.
     // We would cancel the existing active subscription via API.
     return null; 
   }
@@ -136,8 +179,8 @@ export async function syncSubscriptionStatus(admin, shopDomain) {
   const activeSubs = (data.data?.currentAppInstallation?.activeSubscriptions) || [];
 
   if (activeSubs.length === 0) {
-    // No paid subscriptions – revert to free tier
-    await updateShopToTier(shopDomain, "free", null, null, null);
+    // No paid subscriptions – revert to basic (free) tier
+    await updateShopToTier(shopDomain, "basic", null, null, null);
     return;
   }
 
@@ -169,9 +212,12 @@ export async function syncSubscriptionStatus(admin, shopDomain) {
 
 function getTierFromName(name) {
   const lower = name.toLowerCase();
-  if (lower.includes("pro")) return "pro";
+  if (lower.includes("premium")) return "premium";
+  if (lower.includes("standard")) return "standard";
+  // Legacy mappings for existing subscriptions
+  if (lower.includes("pro")) return "premium";
   if (lower.includes("basic")) return "basic";
-  return "free";
+  return "basic";
 }
 
 async function updateShopToTier(shopDomain, tier, interval, subId, subName) {

@@ -25,6 +25,7 @@ import SectionBlock from "../components/SectionBlock";
 import TemplateBuilderPreview from "../components/TemplateBuilderPreview";
 import ElementEditor from "../components/ElementEditor";
 import ProductRuleBuilder from "../components/ProductRuleBuilder";
+import { useUnsavedChanges } from "../hooks/useUnsavedChanges";
 
 function ColorSwatchItem({ label, value, onChange }) {
   return (
@@ -64,11 +65,40 @@ function ColorSwatchItem({ label, value, onChange }) {
  * Server action — saves the template and all its elements to the database.
  */
 import { syncOptionSetToMetafields } from "../lib/metafields.server";
+import { getShopFeatures } from "../lib/features.server";
 
 export const loader = async ({ request, params }) => {
-  await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
+  const { tier: currentTier, features } = await getShopFeatures(session.shop);
+
   if (params.id === "new") {
-    return { optionSet: null };
+    const url = new URL(request.url);
+    const predefinedId = url.searchParams.get("predefinedId");
+    
+    let optionSet = null;
+    if (predefinedId) {
+      const fs = await import("fs");
+      const path = await import("path");
+      
+      let predefinedTemplates = [];
+      try { predefinedTemplates = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'app', 'lib', 'predefinedTemplates.json'), 'utf-8')); } catch(e){ /* ignore */ }
+      
+      let personalizedTemplates = [];
+      try { personalizedTemplates = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'app', 'lib', 'personalizedTemplates.json'), 'utf-8')); } catch(e){ /* ignore */ }
+
+      const template = predefinedTemplates.find(t => t.id === predefinedId) || personalizedTemplates.find(t => t.id === predefinedId);
+      
+      if (template) {
+        optionSet = {
+          name: template.name,
+          sections: template.sections || [],
+          elements: template.elements || [],
+          productRules: template.productRules || []
+        };
+      }
+    }
+    
+    return { optionSet, currentTier, features };
   }
   
   const optionSet = await prisma.optionSet.findUnique({
@@ -80,7 +110,7 @@ export const loader = async ({ request, params }) => {
     throw new Response("Not Found", { status: 404 });
   }
   
-  return { optionSet };
+  return { optionSet, currentTier, features };
 };
 
 export function ErrorBoundary() {
@@ -110,6 +140,12 @@ export const action = async ({ request, params }) => {
   } catch {
     parsedElements = [];
     parsedSections = [];
+  }
+
+  const { features } = await getShopFeatures(session.shop);
+  const maxSections = features.maxSectionsPerOptionSet || 1;
+  if (parsedSections.length > maxSections) {
+    return { error: `Your plan limits you to ${maxSections} section${maxSections > 1 ? 's' : ''} per template. Please upgrade to Premium for unlimited sections.` };
   }
 
   // Ensure Shop exists
@@ -261,23 +297,15 @@ export const action = async ({ request, params }) => {
       })),
     });
   }
-  // Remap section and element IDs to preserve conditional logic and targeted actions
+  // Generate new IDs for all sections and elements to avoid conflicts
   const secIdMap = {};
   for (const sec of parsedSections) {
-    if (sec.id && sec.id.startsWith("sec_")) {
-      secIdMap[sec.id] = sec.id;
-    } else {
-      secIdMap[sec.id] = `sec_${crypto.randomUUID().replace(/-/g, "")}`;
-    }
+    secIdMap[sec.id] = `sec_${crypto.randomUUID().replace(/-/g, "")}`;
   }
 
   const elIdMap = {};
   for (const el of parsedElements) {
-    if (el.id && el.id.startsWith("el_")) {
-      elIdMap[el.id] = el.id;
-    } else {
-      elIdMap[el.id] = `el_${crypto.randomUUID().replace(/-/g, "")}`;
-    }
+    elIdMap[el.id] = `el_${crypto.randomUUID().replace(/-/g, "")}`;
   }
 
   for (const el of parsedElements) {
@@ -359,7 +387,7 @@ export const action = async ({ request, params }) => {
 export default function NewTemplate() {
   const navigate = useNavigate();
   const fetcher = useFetcher();
-  const { optionSet } = useLoaderData();
+  const { optionSet, currentTier } = useLoaderData();
   const isSaving = fetcher.state !== "idle";
 
   useEffect(() => {
@@ -408,6 +436,18 @@ export default function NewTemplate() {
   });
   const [activeElementId, setActiveElementId] = useState(null);
 
+  const currentState = JSON.stringify({ name, sections, elements, productRules });
+  const [initialStateStr, setInitialStateStr] = useState(currentState);
+  const isDirty = currentState !== initialStateStr;
+
+  useUnsavedChanges(isDirty);
+
+  useEffect(() => {
+    if (fetcher.state === "idle" && fetcher.data && !fetcher.data.error) {
+      setInitialStateStr(currentState);
+    }
+  }, [fetcher.state, fetcher.data, currentState]);
+
   const handleUpdateRules = useCallback((newRules) => {
     setProductRules(newRules);
   }, []);
@@ -427,12 +467,22 @@ export default function NewTemplate() {
   // ─── Section Management ─────────────────────────────────────────────
 
   const handleAddSection = useCallback(() => {
+    const maxSections = currentTier === "premium" ? Infinity : (currentTier === "standard" ? 3 : 1);
+    if (sections.length >= maxSections) {
+      if (typeof shopify !== 'undefined' && shopify.toast) {
+        shopify.toast.show(`Your plan limits you to ${maxSections} section${maxSections > 1 ? 's' : ''}. Upgrade to Premium for unlimited sections.`, { isError: true });
+      } else {
+        alert(`Your plan limits you to ${maxSections} section${maxSections > 1 ? 's' : ''}. Upgrade to Premium for unlimited sections.`);
+      }
+      return;
+    }
+
     const newSection = {
       id: `section-${Date.now()}`,
       collapsed: false,
     };
     setSections((prev) => [...prev, newSection]);
-  }, []);
+  }, [currentTier, sections.length]);
 
   const handleDeleteSection = useCallback((sectionId) => {
     setSections((prev) => prev.filter((s) => s.id !== sectionId));
@@ -490,6 +540,16 @@ export default function NewTemplate() {
   }, []);
 
   const handleDuplicateSection = useCallback((sectionId) => {
+    const maxSections = currentTier === "premium" ? Infinity : (currentTier === "standard" ? 3 : 1);
+    if (sections.length >= maxSections) {
+      if (typeof shopify !== 'undefined' && shopify.toast) {
+        shopify.toast.show(`Your plan limits you to ${maxSections} section${maxSections > 1 ? 's' : ''}. Upgrade to Premium for unlimited sections.`, { isError: true });
+      } else {
+        alert(`Your plan limits you to ${maxSections} section${maxSections > 1 ? 's' : ''}. Upgrade to Premium for unlimited sections.`);
+      }
+      return;
+    }
+
     const sectionIndex = sections.findIndex(s => s.id === sectionId);
     if (sectionIndex === -1) return;
     const originalSection = sections[sectionIndex];
@@ -511,7 +571,7 @@ export default function NewTemplate() {
       }));
       return [...prev, ...newElements];
     });
-  }, [sections]);
+  }, [currentTier, sections]);
 
   const handleDuplicateElement = useCallback((elementId) => {
     const elementIndex = elements.findIndex(el => el.id === elementId);
@@ -608,6 +668,13 @@ export default function NewTemplate() {
     setName("New Option Set");
     setElements([]);
     setSections([{ id: "section-1", collapsed: false }]);
+    setProductRules([]);
+    setInitialStateStr(JSON.stringify({
+      name: "New Option Set",
+      sections: [{ id: "section-1", collapsed: false }],
+      elements: [],
+      productRules: []
+    }));
   }, []);
 
   const handleOpenStyleModal = useCallback((sectionId) => {
@@ -734,6 +801,14 @@ export default function NewTemplate() {
         </InlineStack>
       </Box>
 
+      {fetcher.data?.error && (
+        <Box paddingBlockEnd="400">
+          <Banner tone="critical">
+            <p>{fetcher.data.error}</p>
+          </Banner>
+        </Box>
+      )}
+
       {/* ═══ Main Workspace ═══ */}
       <InlineGrid columns={{ xs: 1, md: ["twoThirds", "oneThird"] }} gap="400">
         {/* ─── Left Column: Builder ─── */}
@@ -745,6 +820,7 @@ export default function NewTemplate() {
               onChange={handleUpdateElement}
               onBack={() => setActiveElementId(null)}
               onDelete={handleDeleteElement}
+              currentTier={currentTier}
             />
           ) : (
             <Card padding="0">
@@ -811,7 +887,7 @@ export default function NewTemplate() {
                       <InlineStack gap="200" blockAlign="center">
                         <Text as="span" fontWeight="semibold">📄</Text>
                         <Text as="span" fontWeight="medium">
-                          Add section ⭐
+                          Add section {currentTier !== "premium" ? "⭐" : ""}
                         </Text>
                       </InlineStack>
                     </Button>

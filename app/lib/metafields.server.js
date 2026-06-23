@@ -1,4 +1,5 @@
 import prisma from "../db.server";
+import { getMatchedOptionSetForProduct } from "./matching.server";
 
 /**
  * Safely execute a GraphQL query via admin.graphql().
@@ -60,6 +61,85 @@ async function deleteMetafieldsBatch(admin, metafieldIdentifiers) {
       console.error("Metafield delete errors:", result.data.metafieldsDelete.userErrors);
     } else if (result.data?.metafieldsDelete?.deletedMetafields) {
       console.log(`Deleted ${result.data.metafieldsDelete.deletedMetafields.length} metafield(s).`);
+    }
+  }
+}
+
+/**
+ * Recalculates and updates the product_options metafield for a list of products.
+ * If a product matches a different Option Set, it will write that new Option Set's payload.
+ * If it matches no Option Sets, it will delete the metafield.
+ */
+async function recalculateMetafieldsForProducts(productGids, shopDomain, admin) {
+  if (productGids.length === 0) return;
+
+  const optionSets = await prisma.optionSet.findMany({
+    where: {
+      shopId: shopDomain,
+      status: { in: ["ACTIVE", "active", "TEMPLATE", "template"] }
+    },
+    include: {
+      productRules: true,
+      sections: {
+        include: { elements: { orderBy: { order: "asc" } } },
+        orderBy: { order: "asc" }
+      }
+    },
+    orderBy: { updatedAt: "desc" }
+  });
+
+  const metafieldsToSet = [];
+  const metafieldsToDelete = [];
+
+  for (const gid of productGids) {
+    const matchedOS = await getMatchedOptionSetForProduct(gid, shopDomain, admin, optionSets);
+    if (matchedOS) {
+      const payload = {
+        id: matchedOS.id,
+        name: matchedOS.name,
+        elements: matchedOS.sections.flatMap(sec =>
+          sec.elements.map(el => ({
+            id: el.id,
+            type: el.type,
+            label: el.label,
+            subtext: el.subtext,
+            required: el.required,
+            order: el.order,
+            config: el.config ? JSON.parse(el.config) : {},
+          }))
+        )
+      };
+      metafieldsToSet.push({
+        ownerId: gid,
+        namespace: "pistalix",
+        key: "product_options",
+        type: "json",
+        value: JSON.stringify(payload)
+      });
+    } else {
+      metafieldsToDelete.push({
+        ownerId: gid,
+        namespace: "pistalix",
+        key: "product_options"
+      });
+    }
+  }
+
+  if (metafieldsToDelete.length > 0) {
+    await deleteMetafieldsBatch(admin, metafieldsToDelete);
+  }
+
+  if (metafieldsToSet.length > 0) {
+    const chunkSize = 25;
+    for (let i = 0; i < metafieldsToSet.length; i += chunkSize) {
+      const chunk = metafieldsToSet.slice(i, i + chunkSize);
+      await safeGraphQL(admin, `
+        mutation MetafieldsSet($metafields: [MetafieldsSetInput!]!) {
+          metafieldsSet(metafields: $metafields) {
+            userErrors { message }
+          }
+        }
+      `, { metafields: chunk });
     }
   }
 }
@@ -183,7 +263,7 @@ export async function syncOptionSetToMetafields(optionSetId, admin) {
   }
 
   // 3a. Find products that currently have the metafield for this option set but are no longer targeted
-  const productMetafieldsToDelete = []; // { ownerId, namespace, key }
+  const productsToReevaluate = []; // Product GIDs
   let hasNextPage = true;
   let cursor = null;
 
@@ -220,11 +300,7 @@ export async function syncOptionSetToMetafields(optionSetId, admin) {
         try {
           const metafieldVal = JSON.parse(product.metafield.value);
           if (metafieldVal.id === optionSet.id && !targetProductGids.includes(product.id)) {
-            productMetafieldsToDelete.push({
-              ownerId: product.id,
-              namespace: "pistalix",
-              key: "product_options"
-            });
+            productsToReevaluate.push(product.id);
           }
         } catch (e) {
           // parse error, skip
@@ -234,10 +310,10 @@ export async function syncOptionSetToMetafields(optionSetId, admin) {
     hasNextPage = result.data?.products?.pageInfo?.hasNextPage || false;
   }
 
-  // Execute deletion of old product metafields
-  if (productMetafieldsToDelete.length > 0) {
-    console.log(`Clearing old metafields on ${productMetafieldsToDelete.length} product(s)...`);
-    await deleteMetafieldsBatch(admin, productMetafieldsToDelete);
+  // Execute fallback recalculation for old products
+  if (productsToReevaluate.length > 0) {
+    console.log(`Re-evaluating metafields on ${productsToReevaluate.length} product(s)...`);
+    await recalculateMetafieldsForProducts(productsToReevaluate, optionSet.shopId, admin);
   }
 
   // 3b. Clear shop-level global metafield if this option set is no longer "apply to all"
@@ -342,7 +418,15 @@ export async function syncOptionSetToMetafields(optionSetId, admin) {
  * Clears all product options metafields belonging to the specified optionSetId.
  */
 export async function clearOptionSetMetafields(optionSetId, admin) {
+  const optionSet = await prisma.optionSet.findUnique({
+    where: { id: optionSetId },
+    select: { shopId: true }
+  });
+  if (!optionSet) return;
+
+  const shopDomain = optionSet.shopId;
   const metafieldsToDelete = []; // { ownerId, namespace, key }
+  const productsToReevaluate = []; // Product GIDs
 
   // 1. Check shop-level global_product_options metafield
   const shopMetaResult = await safeGraphQL(admin, `
@@ -414,11 +498,7 @@ export async function clearOptionSetMetafields(optionSetId, admin) {
         try {
           const metafieldVal = JSON.parse(product.metafield.value);
           if (metafieldVal.id === optionSetId) {
-            metafieldsToDelete.push({
-              ownerId: product.id,
-              namespace: "pistalix",
-              key: "product_options"
-            });
+            productsToReevaluate.push(product.id);
           }
         } catch (e) {
           // parse error, skip
@@ -428,9 +508,15 @@ export async function clearOptionSetMetafields(optionSetId, admin) {
     hasNextPage = result.data?.products?.pageInfo?.hasNextPage || false;
   }
 
-  // 3. Delete all collected metafields
+  // 3. Delete shop-level metafield if needed
   if (metafieldsToDelete.length > 0) {
-    console.log(`Clearing ${metafieldsToDelete.length} metafield(s) for option set ${optionSetId}...`);
+    console.log(`Clearing ${metafieldsToDelete.length} global metafield(s) for option set ${optionSetId}...`);
     await deleteMetafieldsBatch(admin, metafieldsToDelete);
+  }
+
+  // 4. Re-evaluate products that used this option set
+  if (productsToReevaluate.length > 0) {
+    console.log(`Re-evaluating metafields for ${productsToReevaluate.length} product(s) previously on option set ${optionSetId}...`);
+    await recalculateMetafieldsForProducts(productsToReevaluate, shopDomain, admin);
   }
 }

@@ -356,6 +356,11 @@ export default function ElementConfigForm({ element, updateField, updateConfig }
               autoComplete="off" 
             />
           </InlineGrid>
+          <Checkbox
+            label="Hide default header & close button"
+            checked={config.hideHeader || false}
+            onChange={(v) => updateConfig("hideHeader", v)}
+          />
           <Box>
             <InlineStack align="start" blockAlign="center" gap="200" paddingBlockEnd="100">
               <Text as="p" variant="bodyMd">Modal content</Text>

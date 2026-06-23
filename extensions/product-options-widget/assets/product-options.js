@@ -561,29 +561,87 @@ function updateTotalPrice() {
   }
 
   if (shouldAddPriceToProduct !== false) {
-    // Dynamic selector finding so we don't depend on DOM ready order
-    var selectors = [
-      '.price-item--sale',
-      '.price__sale .price-item--sale',
-      '.price-item--regular',
-      '.price__regular .price-item--regular',
-      '.product-single__price',
-      '.product__price',
-      '.price .price-item',
-      '.current-price',
-      '[data-product-price]',
-      '.product-price'
-    ];
+    window.pistalixLastFormattedPrice = formattedPrice;
 
-    selectors.forEach(function (sel) {
-      document.querySelectorAll(sel).forEach(function (el) {
-        // Don't update the strikethrough compare-at price when on sale
-        if (el.closest('.price--on-sale') && !el.closest('.price__sale')) return;
+    var findPriceElements = function () {
+      var elements = [];
 
-        // Update DOM
-        el.innerHTML = formattedPrice;
+      // Priority #1: Predefined Registry
+      var predefinedSelectors = [
+        '.price-item--sale',
+        '.price__sale .price-item--sale',
+        '.price-item--regular',
+        '.price__regular .price-item--regular',
+        '.product-single__price',
+        '.product__price',
+        '.price .price-item',
+        '.current-price',
+        '[data-product-price]',
+        '.product-price'
+      ];
+
+      predefinedSelectors.forEach(function (sel) {
+        document.querySelectorAll(sel).forEach(function (el) {
+          // Don't update the strikethrough compare-at price when on sale
+          if (el.closest('.price--on-sale') && !el.closest('.price__sale')) return;
+          elements.push(el);
+        });
       });
+
+      // Priority #2: Merchant Override
+      if (elements.length === 0 && capConfig.settings && capConfig.settings.customPriceSelector) {
+        try {
+          document.querySelectorAll(capConfig.settings.customPriceSelector).forEach(function (el) {
+            elements.push(el);
+          });
+        } catch (e) { /* ignore invalid selector errors */ }
+      }
+
+      // Priority #3: Safety Net
+      if (elements.length === 0) {
+        document.querySelectorAll('[itemprop="price"]').forEach(function (el) {
+          elements.push(el);
+        });
+      }
+
+      return elements;
+    };
+
+    var priceElements = findPriceElements();
+    priceElements.forEach(function (el) {
+      el.innerHTML = formattedPrice;
     });
+
+    // Handle Theme Drift with MutationObserver
+    if (!window.pistalixPriceObserver) {
+      window.pistalixPriceObserver = new MutationObserver(function (mutations) {
+        var shouldReapply = false;
+        mutations.forEach(function (mutation) {
+          if (mutation.type === 'childList' || mutation.type === 'characterData') {
+            shouldReapply = true;
+          }
+        });
+        if (shouldReapply && window.pistalixLastFormattedPrice) {
+          // Disconnect temporarily to avoid infinite loops
+          window.pistalixPriceObserver.disconnect();
+          var elementsToUpdate = findPriceElements();
+          elementsToUpdate.forEach(function (el) {
+            if (el.innerHTML !== window.pistalixLastFormattedPrice) {
+              el.innerHTML = window.pistalixLastFormattedPrice;
+            }
+          });
+          // Reconnect
+          elementsToUpdate.forEach(function (el) {
+            window.pistalixPriceObserver.observe(el, { childList: true, subtree: true, characterData: true });
+          });
+        }
+      });
+
+      // Initial observe
+      priceElements.forEach(function (el) {
+        window.pistalixPriceObserver.observe(el, { childList: true, subtree: true, characterData: true });
+      });
+    }
 
     // Update Add to Cart button text
     var addToCartBtn = document.querySelector('button[name="add"], .product-form__submit, #AddToCart, .add-to-cart');
@@ -1070,10 +1128,20 @@ function injectIntoCartForm(wrapper, container) {
   }
 
   if (!cartForm) {
-    cartForm = document.querySelector('form[action*="/cart/add"]');
+    var possibleFormSelectors = [
+      'form[action*="/cart/add"]',
+      'form[action="/cart/add"]',
+      'form[action$="/cart/add"]',
+      'form[action="/cart/add.js"]',
+      'form.product-form',
+      'form.cart',
+      'form[data-type="add-to-cart-form"]'
+    ];
+    for (var i = 0; i < possibleFormSelectors.length; i++) {
+      cartForm = document.querySelector(possibleFormSelectors[i]);
+      if (cartForm) break;
+    }
   }
-
-  if (!cartForm) return;
 
   var appSettings = capConfig.settings || {};
   if (!appSettings || Object.keys(appSettings).length === 0) {
@@ -1100,6 +1168,7 @@ function injectIntoCartForm(wrapper, container) {
     } else {
       // Fallback if selector not found
       if (cartForm) cartForm.appendChild(wrapper);
+      else document.body.appendChild(wrapper);
     }
   } else if (position.includes("product variants")) {
     var variantWrappers = cartForm ? cartForm.querySelectorAll('variant-selects, variant-radios, .product-variant-picker, .selector-wrapper') : null;
@@ -1124,6 +1193,7 @@ function injectIntoCartForm(wrapper, container) {
     } else {
       // Fallback
       if (cartForm) cartForm.appendChild(wrapper);
+      else document.body.appendChild(wrapper);
     }
   } else {
     // Default to cart buttons
@@ -1138,47 +1208,66 @@ function injectIntoCartForm(wrapper, container) {
       } else {
         cartForm.appendChild(wrapper);
       }
+    } else {
+      document.body.appendChild(wrapper);
     }
   }
 
   // Fallback: Bind all inputs explicitly to this form via HTML5 'form' attribute
-  var formId = cartForm.getAttribute('id');
-  if (formId) {
-    wrapper.setAttribute('data-form-id', formId);
-    var bindInputs = function () {
-      wrapper.querySelectorAll('input, select, textarea').forEach(function (inp) {
-        inp.setAttribute('form', formId);
-      });
-    };
-    bindInputs();
-    // Re-bind when dynamically adding hidden price inputs later
-    var observer = new MutationObserver(bindInputs);
-    observer.observe(wrapper, { childList: true, subtree: true });
-  }
-
-  var submitHandler = function (e) {
-    if (!validateCustomOptions()) {
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      return false;
+  if (cartForm) {
+    var formId = cartForm.getAttribute('id');
+    if (formId) {
+      wrapper.setAttribute('data-form-id', formId);
+      var bindInputs = function () {
+        wrapper.querySelectorAll('input, select, textarea').forEach(function (inp) {
+          inp.setAttribute('form', formId);
+        });
+      };
+      bindInputs();
+      // Re-bind when dynamically adding hidden price inputs later
+      var observer = new MutationObserver(bindInputs);
+      observer.observe(wrapper, { childList: true, subtree: true });
     }
-  };
 
-  cartForm.addEventListener('submit', submitHandler, true);
-
-  // Guarantee "Go to cart immediately" works by hijacking the button click in capture phase
-  var submitBtn = cartForm.querySelector('button[type="submit"], input[type="submit"], [name="add"], .add-to-cart');
-  if (submitBtn) {
-    submitBtn.addEventListener('click', function (e) {
+    var submitHandler = function (e) {
       if (!validateCustomOptions()) {
         e.preventDefault();
-        e.stopPropagation();
         e.stopImmediatePropagation();
         return false;
       }
+      
+      if (wrapper) {
+        var hiddenInputs = wrapper.querySelectorAll('input[type="hidden"]');
+        hiddenInputs.forEach(function(inp) {
+          if (inp.name) {
+            var existing = cartForm.querySelector('input[name="' + inp.name + '"]');
+            if (!existing) {
+              var clone = document.createElement('input');
+              clone.type = 'hidden';
+              clone.name = inp.name;
+              clone.value = inp.value;
+              clone.className = 'cap-injected-hidden';
+              cartForm.appendChild(clone);
+            } else {
+              existing.value = inp.value;
+            }
+          }
+        });
+      }
+    };
 
-      // goToCart logic has been completely removed as requested
-    }, true);
+    cartForm.addEventListener('submit', submitHandler, true);
+
+    var submitBtn = cartForm.querySelector('button[type="submit"], input[type="submit"], [name="add"], .add-to-cart');
+    if (submitBtn) {
+      submitBtn.addEventListener('click', function (e) {
+        if (!validateCustomOptions()) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          return false;
+        }
+      }, true);
+    }
   }
 
   // Force-inject properties into cart/add fetch requests to bypass any theme serialization quirks
@@ -1229,20 +1318,37 @@ function injectIntoCartForm(wrapper, container) {
               if (config.body.trim().indexOf('{') === 0) {
                 try {
                   var json = JSON.parse(config.body);
-                  if (!json.properties) json.properties = {};
-                  inputs.forEach(function (inp) {
-                    if (inp.type === 'radio' && !inp.checked) return;
-                    if (inp.type === 'checkbox' && !inp.checked) return;
-                    if (inp.disabled) return;
-                    var _grp = inp.closest('.cap-option-group');
-                    if (_grp && _grp.style.display === 'none') return;
-                    if (inp.value) {
-                      var propMatch = inp.name.match(/properties\[(.*?)\]/);
-                      if (propMatch && propMatch[1]) {
-                        json.properties[propMatch[1]] = inp.value;
+                  if (json.items && Array.isArray(json.items) && json.items.length > 0) {
+                    json.items[0].properties = json.items[0].properties || {};
+                    inputs.forEach(function (inp) {
+                      if (inp.type === 'radio' && !inp.checked) return;
+                      if (inp.type === 'checkbox' && !inp.checked) return;
+                      if (inp.disabled) return;
+                      var _grp = inp.closest('.cap-option-group');
+                      if (_grp && _grp.style.display === 'none') return;
+                      if (inp.value) {
+                        var propMatch = inp.name.match(/properties\[(.*?)\]/);
+                        if (propMatch && propMatch[1]) {
+                          json.items[0].properties[propMatch[1]] = inp.value;
+                        }
                       }
-                    }
-                  });
+                    });
+                  } else {
+                    if (!json.properties) json.properties = {};
+                    inputs.forEach(function (inp) {
+                      if (inp.type === 'radio' && !inp.checked) return;
+                      if (inp.type === 'checkbox' && !inp.checked) return;
+                      if (inp.disabled) return;
+                      var _grp = inp.closest('.cap-option-group');
+                      if (_grp && _grp.style.display === 'none') return;
+                      if (inp.value) {
+                        var propMatch = inp.name.match(/properties\[(.*?)\]/);
+                        if (propMatch && propMatch[1]) {
+                          json.properties[propMatch[1]] = inp.value;
+                        }
+                      }
+                    });
+                  }
                   config.body = JSON.stringify(json);
                 } catch (e) {
                   console.warn("Pistalix: Fetch JSON parse failed", e);
@@ -1332,20 +1438,37 @@ function injectIntoCartForm(wrapper, container) {
             if (body.trim().indexOf('{') === 0) {
               try {
                 var json = JSON.parse(body);
-                if (!json.properties) json.properties = {};
-                inputs.forEach(function (inp) {
-                  if (inp.type === 'radio' && !inp.checked) return;
-                  if (inp.type === 'checkbox' && !inp.checked) return;
-                  if (inp.disabled) return;
-                  var _grp = inp.closest('.cap-option-group');
-                  if (_grp && _grp.style.display === 'none') return;
-                  if (inp.value) {
-                    var propMatch = inp.name.match(/properties\[(.*?)\]/);
-                    if (propMatch && propMatch[1]) {
-                      json.properties[propMatch[1]] = inp.value;
+                if (json.items && Array.isArray(json.items) && json.items.length > 0) {
+                  json.items[0].properties = json.items[0].properties || {};
+                  inputs.forEach(function (inp) {
+                    if (inp.type === 'radio' && !inp.checked) return;
+                    if (inp.type === 'checkbox' && !inp.checked) return;
+                    if (inp.disabled) return;
+                    var _grp = inp.closest('.cap-option-group');
+                    if (_grp && _grp.style.display === 'none') return;
+                    if (inp.value) {
+                      var propMatch = inp.name.match(/properties\[(.*?)\]/);
+                      if (propMatch && propMatch[1]) {
+                        json.items[0].properties[propMatch[1]] = inp.value;
+                      }
                     }
-                  }
-                });
+                  });
+                } else {
+                  if (!json.properties) json.properties = {};
+                  inputs.forEach(function (inp) {
+                    if (inp.type === 'radio' && !inp.checked) return;
+                    if (inp.type === 'checkbox' && !inp.checked) return;
+                    if (inp.disabled) return;
+                    var _grp = inp.closest('.cap-option-group');
+                    if (_grp && _grp.style.display === 'none') return;
+                    if (inp.value) {
+                      var propMatch = inp.name.match(/properties\[(.*?)\]/);
+                      if (propMatch && propMatch[1]) {
+                        json.properties[propMatch[1]] = inp.value;
+                      }
+                    }
+                  });
+                }
                 body = JSON.stringify(json);
               } catch (e) {
                 console.warn("Pistalix: XHR JSON parse failed", e);
@@ -3769,7 +3892,7 @@ function renderVariantFetcher(element) {
           var v = variants[vi];
           var match = true;
           for (var oki = 0; oki < options.length; oki++) {
-            if (v['option' + (oki + 1)] !== selectedOptions[oki]) {
+            if (String(v['option' + (oki + 1)]) !== String(selectedOptions[oki])) {
               match = false;
               break;
             }

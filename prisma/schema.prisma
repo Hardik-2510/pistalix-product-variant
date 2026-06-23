@@ -43,7 +43,7 @@ model Shop {
   subscriptionId     String?   // Shopify GID
   subscriptionStatus String?   // ACTIVE, CANCELLED, PENDING, EXPIRED
   planName           String?   // Human readable name from Shopify (e.g. "Basic Plan - Monthly")
-  planTier           String?   // 'free', 'basic', 'pro' 
+  planTier           String?   // 'basic', 'standard', 'premium'
   billingInterval    String?   // 'monthly', 'yearly', null
 
   optionSets  OptionSet[]

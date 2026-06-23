@@ -1,0 +1,499 @@
+diff --git a/app/components/ElementRenderer.jsx b/app/components/ElementRenderer.jsx
+index e7d8f61..b485040 100644
+--- a/app/components/ElementRenderer.jsx
++++ b/app/components/ElementRenderer.jsx
+@@ -181,43 +181,7 @@ export default function ElementRenderer({ element, value, onChange }) {
+       );
+     }
+ 
+-    case "file_upload":
+-    case "file upload": {
+-      const renderLabel = () => {
+-        const textLabel = `${label}${getAddOnText(config)}`;
+-        if (config.helpText && config.helpTextPosition === "Tooltip") {
+-          return (
+-            <InlineStack gap="100" blockAlign="center">
+-              <Text as="span">{textLabel}</Text>
+-              <Tooltip content={config.helpText}>
+-                <Text as="span" tone="subdued" cursor="help">ⓘ</Text>
+-              </Tooltip>
+-            </InlineStack>
+-          );
+-        }
+-        return textLabel;
+-      };
+ 
+-      return (
+-        <Box>
+-          <Text as="p" variant="bodySm" fontWeight="semibold" paddingBlockEnd="100">{renderLabel()}</Text>
+-          <div style={{
+-            border: "1px dashed var(--p-color-border)",
+-            borderRadius: "4px",
+-            padding: "16px",
+-            textAlign: "center",
+-            backgroundColor: "var(--p-color-bg-surface-secondary)"
+-          }}>
+-            <Button>{config.buttonText || "Upload File"}</Button>
+-            <Box paddingBlockStart="100">
+-              <Text tone="subdued" variant="bodySm">
+-                {config.helpText || `Max size: ${config.maxSizeMB || 10}MB`}
+-              </Text>
+-            </Box>
+-          </div>
+-        </Box>
+-      );
+-    }
+ 
+     case "textarea": {
+       const currentLength = (value || "").length;
+@@ -708,6 +672,7 @@ export default function ElementRenderer({ element, value, onChange }) {
+ 
+     case "file_upload":
+     case "file upload": {
++      const inputId = `file-upload-${element.id || Math.random().toString(36).substr(2, 9)}`;
+       const allowedExts = config.allowedExtensions || ".jpeg, .jpg, .png, .webp, .svg";
+       const isFileUploaded = value && value instanceof File;
+       const fileName = isFileUploaded ? value.name : (typeof value === "string" && value ? value : "");
+@@ -739,12 +704,15 @@ export default function ElementRenderer({ element, value, onChange }) {
+                    {filePreviewUrl ? (
+                      <img src={filePreviewUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    ) : (
+-                     <div style={{ width: "100%", height: "100%", backgroundColor: "#f4f6f8", display: "flex", alignItems: "center", justifyContent: "center", color: "#8c9196", fontSize: "10px", fontWeight: "bold" }}>FILE</div>
++                     <div style={{ width: "100%", height: "100%", backgroundColor: "#F4F6F8", display: "flex", alignItems: "center", justifyContent: "center" }}>
++                        <Text variant="bodyXs" tone="subdued">FILE</Text>
++                     </div>
+                    )}
+                  </div>
+-                 <span style={{ color: "white", fontSize: "15px", fontWeight: "500", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+-                   {fileName}
+-                 </span>
++                 <div style={{ overflow: "hidden" }}>
++                   <Text as="p" variant="bodyMd" fontWeight="semibold" tone="textInverse" truncate>{fileName}</Text>
++                   {isFileUploaded && <Text as="p" variant="bodyXs" tone="textInverse">{(value.size / 1024 / 1024).toFixed(2)} MB</Text>}
++                 </div>
+                </div>
+                <button 
+                  onClick={(e) => { e.preventDefault(); handleTextChange(null); }}
+@@ -762,6 +730,9 @@ export default function ElementRenderer({ element, value, onChange }) {
+             </div>
+           ) : (
+             <label style={{ display: "block", cursor: "pointer" }} htmlFor={inputId}>
++              <span style={{ border: 0, clip: "rect(0 0 0 0)", height: "1px", margin: "-1px", overflow: "hidden", padding: 0, position: "absolute", width: "1px" }}>
++                Upload {label}
++              </span>
+               <input 
+                 id={inputId}
+                 type="file" 
+diff --git a/app/routes/api.checkout.jsx b/app/routes/api.checkout.jsx
+deleted file mode 100644
+index 6f5e102..0000000
+--- a/app/routes/api.checkout.jsx
++++ /dev/null
+@@ -1,101 +0,0 @@
+-import { json } from "@remix-run/node";
+-import { authenticate } from "../shopify.server";
+-
+-export async function action({ request }) {
+-  if (request.method !== "POST") {
+-    return json({ error: "Method not allowed" }, { status: 405 });
+-  }
+-
+-  try {
+-    const { admin } = await authenticate.public.appProxy(request);
+-
+-    if (!admin) {
+-      return json({ error: "Unauthorized" }, { status: 401 });
+-    }
+-
+-    const body = await request.json();
+-    const { cart } = body;
+-
+-    if (!cart || !cart.items || cart.items.length === 0) {
+-      return json({ error: "Cart is empty" }, { status: 400 });
+-    }
+-
+-    // Map cart items to Draft Order line items
+-    const lineItems = cart.items.map((item) => {
+-      // Find the final price property if it exists
+-      let finalPrice = null;
+-      const customAttributes = [];
+-      
+-      if (item.properties) {
+-        for (const [key, value] of Object.entries(item.properties)) {
+-          if (key === "_final_price") {
+-            finalPrice = parseFloat(value);
+-          } else if (key && value && !key.startsWith('_')) {
+-            // Include visible properties as custom attributes
+-            // Important: we filter out internal properties starting with '_'
+-            customAttributes.push({ key, value: String(value) });
+-          }
+-        }
+-      }
+-
+-      const draftItem = {
+-        variantId: `gid://shopify/ProductVariant/${item.variant_id}`,
+-        quantity: item.quantity,
+-      };
+-
+-      // Override price if _final_price exists
+-      if (finalPrice !== null && !isNaN(finalPrice)) {
+-        draftItem.originalUnitPrice = finalPrice.toString();
+-      }
+-
+-      if (customAttributes.length > 0) {
+-        draftItem.customAttributes = customAttributes;
+-      }
+-
+-      return draftItem;
+-    });
+-
+-    // Create the Draft Order via GraphQL
+-    const response = await admin.graphql(`
+-      mutation draftOrderCreate($input: DraftOrderInput!) {
+-        draftOrderCreate(input: $input) {
+-          draftOrder {
+-            id
+-            invoiceUrl
+-          }
+-          userErrors {
+-            field
+-            message
+-          }
+-        }
+-      }
+-    `, {
+-      variables: {
+-        input: {
+-          lineItems,
+-          // You could optionally apply shop locale or other parameters here
+-        }
+-      }
+-    });
+-
+-    const data = await response.json();
+-
+-    if (data.data?.draftOrderCreate?.userErrors?.length > 0) {
+-      console.error("Draft Order Create Errors:", data.data.draftOrderCreate.userErrors);
+-      return json({ error: "Failed to create checkout", details: data.data.draftOrderCreate.userErrors }, { status: 500 });
+-    }
+-
+-    const draftOrder = data.data?.draftOrderCreate?.draftOrder;
+-
+-    if (!draftOrder || !draftOrder.invoiceUrl) {
+-      return json({ error: "Failed to retrieve checkout URL" }, { status: 500 });
+-    }
+-
+-    // Return the Draft Order checkout URL
+-    return json({ invoiceUrl: draftOrder.invoiceUrl });
+-
+-  } catch (error) {
+-    console.error("API Checkout Error:", error);
+-    return json({ error: "Internal server error" }, { status: 500 });
+-  }
+-}
+diff --git a/extensions/product-options-widget/assets/product-options.js b/extensions/product-options-widget/assets/product-options.js
+index f0595e9..c75529a 100644
+--- a/extensions/product-options-widget/assets/product-options.js
++++ b/extensions/product-options-widget/assets/product-options.js
+@@ -113,6 +113,171 @@ if (!window.pistalixSubmitTrackerRegistered) {
+   document.addEventListener('submit', function (e) {
+     window.pistalixLastSubmittedForm = e.target;
+   }, true);
++
++  // Intercept fetch to handle AJAX cart submit calls (for Dawn and other modern themes)
++  var originalFetch = window.fetch;
++  window.fetch = function () {
++    var urlArg = arguments[0];
++    var urlStr = typeof urlArg === 'string' ? urlArg : (urlArg && urlArg.url ? urlArg.url : '');
++    var config = arguments[1];
++    
++    if (urlStr && urlStr.indexOf('/cart/add') !== -1) {
++      if (config && config.body) {
++        var wrapperEl = null;
++        if (window.pistalixLastSubmittedForm) {
++          wrapperEl = window.pistalixLastSubmittedForm.querySelector('.cap-options-wrapper');
++        }
++        if (!wrapperEl) {
++          wrapperEl = document.querySelector('.cap-options-wrapper');
++        }
++        if (wrapperEl) {
++          var inputs = wrapperEl.querySelectorAll('[name^="properties["]');
++          if (config.body instanceof FormData) {
++            inputs.forEach(function (inp) {
++              if (inp.type === 'radio' && !inp.checked) return;
++              if (inp.type === 'checkbox' && !inp.checked) return;
++              if (inp.disabled) return;
++              
++              if (inp.type === 'file') {
++                if (inp.files && inp.files.length > 0) {
++                  if (inp.files.length === 1) {
++                    config.body.set(inp.name, inp.files[0]);
++                  } else {
++                    for (var k = 0; k < inp.files.length; k++) {
++                      var arrName = inp.name.replace(']', ' ' + (k + 1) + ']');
++                      config.body.set(arrName, inp.files[k]);
++                    }
++                  }
++                }
++              } else if (inp.value) {
++                config.body.set(inp.name, inp.value);
++              }
++            });
++          } else if (typeof config.body === 'string') {
++            if (config.body.trim().indexOf('{') === 0) {
++              try {
++                var json = JSON.parse(config.body);
++                if (!json.properties) json.properties = {};
++                inputs.forEach(function (inp) {
++                  if (inp.type === 'radio' && !inp.checked) return;
++                  if (inp.type === 'checkbox' && !inp.checked) return;
++                  if (inp.disabled) return;
++                  if (inp.value) {
++                    var propMatch = inp.name.match(/properties\[(.*?)\]/);
++                    if (propMatch && propMatch[1]) {
++                      json.properties[propMatch[1]] = inp.value;
++                    }
++                  }
++                });
++                config.body = JSON.stringify(json);
++              } catch (e) {
++                console.warn("Pistalix: Fetch JSON parse failed", e);
++              }
++            } else {
++              try {
++                var params = new URLSearchParams(config.body);
++                inputs.forEach(function (inp) {
++                  if (inp.type === 'radio' && !inp.checked) return;
++                  if (inp.type === 'checkbox' && !inp.checked) return;
++                  if (inp.disabled) return;
++                  if (inp.value) {
++                    params.set(inp.name, inp.value);
++                  }
++                });
++                config.body = params.toString();
++              } catch (e) {
++                console.warn("Pistalix: Fetch query string parse failed", e);
++              }
++            }
++          }
++        }
++      }
++    }
++    return originalFetch.apply(window, arguments);
++  };
++
++  // Intercept XMLHttpRequest to handle Axios/jQuery cart submit calls
++  var originalOpen = window.XMLHttpRequest.prototype.open;
++  var originalSend = window.XMLHttpRequest.prototype.send;
++
++  window.XMLHttpRequest.prototype.open = function (method, url) {
++    this._url = url;
++    return originalOpen.apply(this, arguments);
++  };
++
++  window.XMLHttpRequest.prototype.send = function (body) {
++    if (this._url && typeof this._url === 'string' && this._url.indexOf('/cart/add') !== -1) {
++      var wrapperEl = null;
++      if (window.pistalixLastSubmittedForm) {
++        wrapperEl = window.pistalixLastSubmittedForm.querySelector('.cap-options-wrapper');
++      }
++      if (!wrapperEl) {
++        wrapperEl = document.querySelector('.cap-options-wrapper');
++      }
++      if (wrapperEl && body) {
++        var inputs = wrapperEl.querySelectorAll('[name^="properties["]');
++        if (body instanceof FormData) {
++          inputs.forEach(function (inp) {
++            if (inp.type === 'radio' && !inp.checked) return;
++            if (inp.type === 'checkbox' && !inp.checked) return;
++            if (inp.disabled) return;
++            
++            if (inp.type === 'file') {
++              if (inp.files && inp.files.length > 0) {
++                if (inp.files.length === 1) {
++                  body.set(inp.name, inp.files[0]);
++                } else {
++                  for (var k = 0; k < inp.files.length; k++) {
++                    var arrName = inp.name.replace(']', ' ' + (k + 1) + ']');
++                    body.set(arrName, inp.files[k]);
++                  }
++                }
++              }
++            } else if (inp.value) {
++              body.set(inp.name, inp.value);
++            }
++          });
++        } else if (typeof body === 'string') {
++          if (body.trim().indexOf('{') === 0) {
++            try {
++              var json = JSON.parse(body);
++              if (!json.properties) json.properties = {};
++              inputs.forEach(function (inp) {
++                if (inp.type === 'radio' && !inp.checked) return;
++                if (inp.type === 'checkbox' && !inp.checked) return;
++                if (inp.disabled) return;
++                if (inp.value) {
++                  var propMatch = inp.name.match(/properties\[(.*?)\]/);
++                  if (propMatch && propMatch[1]) {
++                    json.properties[propMatch[1]] = inp.value;
++                  }
++                }
++              });
++              body = JSON.stringify(json);
++            } catch (e) {
++              console.warn("Pistalix: XHR JSON parse failed", e);
++            }
++          } else {
++            try {
++              var params = new URLSearchParams(body);
++              inputs.forEach(function (inp) {
++                if (inp.type === 'radio' && !inp.checked) return;
++                if (inp.type === 'checkbox' && !inp.checked) return;
++                if (inp.disabled) return;
++                if (inp.value) {
++                  params.set(inp.name, inp.value);
++                }
++              });
++              body = params.toString();
++            } catch (e) {
++              console.warn("Pistalix: XHR query string parse failed", e);
++            }
++          }
++        }
++      }
++    }
++    return originalSend.call(this, body);
++  };
+ }
+ 
+ async function fetchTemplate(productId, shop, appUrl) {
+@@ -316,7 +481,8 @@ function updateTotalPrice() {
+       }
+       inp.value = val;
+     };
+-    var zeroDecimalCurrencies = ['BIF', 'CLP', 'DJF', 'GNF', 'JPY', 'KMF', 'KRW', 'LAK', 'PYG', 'RWF', 'UGX', 'VND', 'VUV', 'XAF', 'XOF', 'XPF'];
++
++    var zeroDecimalCurrencies = ['JPY', 'KRW', 'TWD', 'VND', 'CLP', 'PYG', 'VUV', 'RWF', 'GNF', 'DJF', 'MGA', 'KMF', 'XAF', 'XOF', 'XPF'];
+     var isZeroDecimal = zeroDecimalCurrencies.indexOf(capConfig.currency || 'USD') !== -1;
+     var formattedBase = isZeroDecimal ? capConfig.basePrice.toString() : (capConfig.basePrice / 100).toFixed(2);
+     var formattedFinal = isZeroDecimal ? finalPriceCents.toString() : (finalPriceCents / 100).toFixed(2);
+@@ -920,7 +1086,14 @@ function injectIntoCartForm(wrapper, container) {
+                 if (inp.disabled) return;
+                 if (inp.type === 'file') {
+                   if (inp.files && inp.files.length > 0) {
+-                    config.body.set(inp.name, inp.files[0]);
++                    if (inp.files.length === 1) {
++                      config.body.set(inp.name, inp.files[0]);
++                    } else {
++                      for (var k = 0; k < inp.files.length; k++) {
++                        var arrName = inp.name.replace(']', ' ' + (k + 1) + ']');
++                        config.body.set(arrName, inp.files[k]);
++                      }
++                    }
+                   }
+                 } else if (inp.value) {
+                   config.body.set(inp.name, inp.value);
+@@ -1010,7 +1183,14 @@ function injectIntoCartForm(wrapper, container) {
+               if (inp.disabled) return;
+               if (inp.type === 'file') {
+                 if (inp.files && inp.files.length > 0) {
+-                  body.set(inp.name, inp.files[0]);
++                  if (inp.files.length === 1) {
++                    body.set(inp.name, inp.files[0]);
++                  } else {
++                    for (var k = 0; k < inp.files.length; k++) {
++                      var arrName = inp.name.replace(']', ' ' + (k + 1) + ']');
++                      body.set(arrName, inp.files[k]);
++                    }
++                  }
+                 }
+               } else if (inp.value) {
+                 body.set(inp.name, inp.value);
+@@ -2956,87 +3136,4 @@ function initCartPageFeatures(toggleStates) {
+ 
+   // Run initially
+   applyCartModificationsDebounced();
+-
+-  // Re-run on DOM mutations (for ajax carts/drawers)
+-  var observer = new MutationObserver(function (mutations) {
+-    var shouldApply = false;
+-    for (var i = 0; i < mutations.length; i++) {
+-      for (var j = 0; j < mutations[i].addedNodes.length; j++) {
+-        var node = mutations[i].addedNodes[j];
+-        if (node.nodeType === 1 && !node.classList.contains('cap-edit-options-btn')) {
+-          shouldApply = true;
+-        }
+-      }
+-    }
+-    if (shouldApply) applyCartModificationsDebounced();
+-  });
+-
+-  if (document.body) {
+-    observer.observe(document.body, { childList: true, subtree: true });
+-  }
+-
+-  // === DRAFT ORDER CHECKOUT INTERCEPTOR ===
+-  function initCheckoutInterceptor() {
+-    document.addEventListener('click', function(e) {
+-      var btn = e.target.closest('button[name="checkout"], input[name="checkout"], a[href="/checkout"], .checkout-btn, .cart__checkout-button');
+-      if (!btn) return;
+-
+-      e.preventDefault();
+-      e.stopPropagation();
+-      e.stopImmediatePropagation();
+-
+-      if (btn.tagName === 'INPUT') btn.value = 'Processing...';
+-      else btn.innerText = 'Processing...';
+-      
+-      btn.style.pointerEvents = 'none';
+-      btn.disabled = true;
+-
+-      var root = window.Shopify && window.Shopify.routes && window.Shopify.routes.root ? window.Shopify.routes.root : '/';
+-      if (root.charAt(root.length - 1) !== '/') root += '/';
+-
+-      // Fetch current cart
+-      fetch(root + 'cart.js')
+-        .then(function(res) { return res.json(); })
+-        .then(function(cart) {
+-          var hasOptions = cart.items.some(function(item) {
+-            return item.properties && item.properties['_final_price'];
+-          });
+-
+-          // If no custom options are present, go to standard checkout
+-          if (!hasOptions) {
+-            window.location.href = root + 'checkout';
+-            return;
+-          }
+-
+-          // Send to App Proxy
+-          return fetch(root + 'apps/product-options/api/checkout', {
+-            method: 'POST',
+-            headers: { 'Content-Type': 'application/json' },
+-            body: JSON.stringify({ cart: cart })
+-          }).then(function(res) {
+-            if (!res.ok) throw new Error('Checkout proxy failed');
+-            return res.json();
+-          });
+-        })
+-        .then(function(data) {
+-          if (data && data.invoiceUrl) {
+-            window.location.href = data.invoiceUrl;
+-          } else if (data) {
+-            throw new Error('No invoice URL');
+-          }
+-        })
+-        .catch(function(err) {
+-          console.error('Pistalix Draft Order error:', err);
+-          window.location.href = root + 'checkout';
+-        });
+-
+-    }, true);
+-  }
+-
+-  if (document.readyState === 'loading') {
+-    document.addEventListener('DOMContentLoaded', initCheckoutInterceptor);
+-  } else {
+-    initCheckoutInterceptor();
+-  }
+ }
+-

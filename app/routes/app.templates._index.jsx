@@ -12,12 +12,14 @@ import {
   Tabs,
   InlineGrid,
   EmptyState,
-  Badge,
 } from "@shopify/polaris";
+import { PlusIcon, ViewIcon } from "@shopify/polaris-icons";
 import "@shopify/polaris/build/esm/styles.css";
 import { useNavigate, useLoaderData, useFetcher } from "react-router";
 import prisma from "../db.server";
 import { authenticate } from "../shopify.server";
+import { validateOptionSetLimit } from "../lib/features.server";
+import process from "process";
 
 export const loader = async ({ request }) => {
   const { session, admin } = await authenticate.admin(request);
@@ -63,9 +65,6 @@ export const loader = async ({ request }) => {
           } catch (e) {
             console.error("Failed to parse collection ID:", e);
           }
-        } else if (rule.targetType === 'all' || rule.targetType === 'ALL_PRODUCTS') {
-          targetsToFetch.push({ setId: set.id, type: 'all', id: 'all' });
-          break;
         }
       }
     }
@@ -79,18 +78,13 @@ export const loader = async ({ request }) => {
           return `
             target_${idx}: product(id: "${item.id}") {
               featuredImage { url }
+              handle
             }
           `;
         } else if (item.type === 'collection') {
           return `
             target_${idx}: collection(id: "${item.id}") {
               image { url }
-            }
-          `;
-        } else if (item.type === 'all') {
-          return `
-            target_${idx}: products(first: 1) {
-              edges { node { featuredImage { url } } }
             }
           `;
         }
@@ -105,12 +99,11 @@ export const loader = async ({ request }) => {
         targetsToFetch.slice(0, 50).forEach((item, idx) => {
           const result = json.data && json.data[`target_${idx}`];
           if (result) {
-            if (item.type === 'product' && result.featuredImage) {
-              setImages[item.setId] = result.featuredImage.url;
+            if (item.type === 'product') {
+              if (result.featuredImage) setImages[item.setId] = result.featuredImage.url;
+              if (result.handle) setImages[`${item.setId}_handle`] = result.handle;
             } else if (item.type === 'collection' && result.image) {
               setImages[item.setId] = result.image.url;
-            } else if (item.type === 'all' && result.edges && result.edges.length > 0 && result.edges[0].node.featuredImage) {
-              setImages[item.setId] = result.edges[0].node.featuredImage.url;
             }
           }
         });
@@ -122,10 +115,22 @@ export const loader = async ({ request }) => {
 
   const setsWithImages = optionSets.map(set => ({
     ...set,
-    imageUrl: setImages[set.id] || null
+    imageUrl: setImages[set.id] || null,
+    handle: setImages[`${set.id}_handle`] || null
   }));
 
-  return { optionSets: setsWithImages };
+  const limitCheck = await validateOptionSetLimit(session.shop);
+
+  const isDev = process.env.NODE_ENV === "development";
+
+  const fs = await import("fs");
+  const path = await import("path");
+  let predefinedTemplates = [];
+  try { predefinedTemplates = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'app', 'lib', 'predefinedTemplates.json'), 'utf-8')); } catch(e){ /* ignore */ }
+  let personalizedTemplates = [];
+  try { personalizedTemplates = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'app', 'lib', 'personalizedTemplates.json'), 'utf-8')); } catch(e){ /* ignore */ }
+
+  return { optionSets: setsWithImages, limitCheck, shopDomain: session.shop, predefinedTemplates, personalizedTemplates, isDev };
 };
 
 export const action = async ({ request }) => {
@@ -137,6 +142,62 @@ export const action = async ({ request }) => {
   if (intent === "delete" && id) {
     await prisma.optionSet.delete({ where: { id } });
     return { success: true };
+  }
+
+  if (intent === "assign_global") {
+    if (process.env.NODE_ENV !== "development") return new Response(JSON.stringify({ error: "Dev only" }), { status: 403 });
+    const target = formData.get("target"); // "pre-designed" or "personalized"
+    const imageUrl = formData.get("imageUrl");
+    const demoUrl = formData.get("demoUrl");
+    const template = await prisma.optionSet.findUnique({
+      where: { id },
+      include: { sections: true, elements: true, productRules: true }
+    });
+    if (!template) return new Response(JSON.stringify({ error: "Template not found" }), { status: 404 });
+
+    const cleanTemplate = {
+      id: template.name.replace(/\s+/g, '-').toLowerCase() + '-' + Date.now(),
+      name: template.name,
+      imageUrl: imageUrl || null,
+      demoUrl: demoUrl || null,
+      productRules: template.productRules ? template.productRules.map(pr => ({
+        targetType: pr.targetType,
+        targetValues: pr.targetValues
+      })) : [],
+      sections: template.sections.map(s => ({
+        id: s.id,
+        title: s.title,
+        order: s.order,
+        visible: s.visible,
+        styles: s.styles
+      })),
+      elements: template.elements.map(e => ({
+        id: e.id,
+        sectionId: e.sectionId,
+        type: e.type,
+        label: e.label,
+        subtext: e.subtext,
+        required: e.required,
+        order: e.order,
+        config: e.config
+      }))
+    };
+
+    const fs = await import('fs');
+    const path = await import('path');
+    const filename = target === 'personalized' ? 'personalizedTemplates.json' : 'predefinedTemplates.json';
+    const filePath = path.join(process.cwd(), 'app', 'lib', filename);
+    
+    try {
+      let existing = [];
+      try { existing = JSON.parse(fs.readFileSync(filePath, 'utf-8')); } catch (e) { /* ignore */ }
+      existing.push(cleanTemplate);
+      fs.writeFileSync(filePath, JSON.stringify(existing, null, 2));
+      return { success: true };
+    } catch (e) {
+      console.error("Failed to assign template", e);
+      return new Response(JSON.stringify({ error: "Failed to save" }), { status: 500 });
+    }
   }
 
   if (intent === "import") {
@@ -253,8 +314,8 @@ export const action = async ({ request }) => {
   return new Response(JSON.stringify({ error: "Invalid action" }), { status: 400, headers: { "Content-Type": "application/json" } });
 };
 
-export default function Templates() {
-  const { optionSets } = useLoaderData();
+export default function OptionTemplates() {
+  const { optionSets, limitCheck, shopDomain, predefinedTemplates, personalizedTemplates, isDev } = useLoaderData();
   const fetcher = useFetcher();
   const fileInputRef = useRef(null);
 
@@ -331,6 +392,13 @@ export default function Templates() {
   const handleTabChange = useCallback((tabIndex) => setSelected(tabIndex), []);
   const navigate = useNavigate();
 
+  const assignGlobal = useCallback((id, target, imageUrl, demoUrl) => {
+    fetcher.submit({ intent: "assign_global", id, target, imageUrl: imageUrl || '', demoUrl: demoUrl || '' }, { method: "POST" });
+    if (typeof shopify !== 'undefined' && shopify.toast) {
+      shopify.toast.show(`Assigned to ${target} templates`);
+    }
+  }, [fetcher]);
+
   // Delete Modal State
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [templateToDelete, setTemplateToDelete] = useState(null);
@@ -355,35 +423,20 @@ export default function Templates() {
   const tabs = [
     {
       id: "pre-designed",
-      content: (
-        <InlineStack gap="200" align="center">
-          <span>Pre-Designed Templates</span>
-          <Badge tone="new">20</Badge>
-        </InlineStack>
-      ),
+      content: "Pre-Designed Templates",
     },
     {
       id: "personalized",
-      content: (
-        <InlineStack gap="200" align="center">
-          <span>Personalized Templates</span>
-          <Badge tone="new">20</Badge>
-        </InlineStack>
-      ),
+      content: "Personalized Templates",
     },
     {
       id: "custom",
-      content: (
-        <InlineStack gap="200" align="center">
-          <span>Custom Templates</span>
-          <Badge>{optionSets.length}</Badge>
-        </InlineStack>
-      ),
+      content: "Custom Templates",
     },
   ];
 
   // 3. Reusable Template Card Component
-  const TemplateItem = ({ id, title, imageUrl, onClick, onExport }) => (
+  const TemplateItem = ({ id, title, imageUrl, onUseTemplate, onEditTemplate, onExport, demoUrl, onAssignGlobal, onDelete }) => (
     <div className="template-card-wrapper">
     <Card padding="0">
       <BlockStack>
@@ -409,25 +462,51 @@ export default function Templates() {
             <InlineStack align="space-between" blockAlign="center">
               <Text variant="headingMd" as="h3" fontWeight="bold">{title}</Text>
               <InlineStack gap="100">
+                {onAssignGlobal && (
+                  <>
+                    <Button variant="tertiary" onClick={() => onAssignGlobal(id, "pre-designed", imageUrl, demoUrl)}>Add to Pre-Design</Button>
+                    <Button variant="tertiary" onClick={() => onAssignGlobal(id, "personalized", imageUrl, demoUrl)}>Add to Personalized</Button>
+                  </>
+                )}
                 {onExport && (
                   <Button variant="tertiary" onClick={() => onExport(id)}>Export</Button>
                 )}
-                {onClick && (
-                  <Button variant="tertiary" tone="critical" onClick={() => confirmDelete(id)}>Delete</Button>
+                {onDelete && (
+                  <Button variant="tertiary" tone="critical" onClick={() => onDelete(id)}>Delete</Button>
                 )}
               </InlineStack>
             </InlineStack>
-            <InlineStack gap="200" align="space-between">
-              <div style={{ flex: 1 }}>
-                <Button fullWidth variant="primary" onClick={onClick ? onClick : () => {
-                  if (id) navigate(`/app/option-sets/new?templateId=${id}`);
-                  else if (typeof shopify !== 'undefined' && shopify.toast) shopify.toast.show("This template is not available yet");
-                }}>
-                  {onClick ? "Edit template" : "+ Use template"}
+            
+            {onEditTemplate ? (
+              <InlineStack gap="200" align="space-between">
+                <div style={{ flex: 1 }}>
+                  <Button fullWidth variant="primary" onClick={() => onEditTemplate(id)}>
+                    Edit template
+                  </Button>
+                </div>
+                <Button 
+                  disabled={!demoUrl} 
+                  icon={ViewIcon}
+                  onClick={() => demoUrl && window.open(demoUrl, '_blank')}
+                >
+                  View demo
                 </Button>
-              </div>
-              <Button>View demo</Button>
-            </InlineStack>
+              </InlineStack>
+            ) : onUseTemplate ? (
+              <BlockStack gap="200">
+                <Button fullWidth variant="primary" icon={PlusIcon} onClick={() => onUseTemplate(id)}>
+                  Use template
+                </Button>
+                <Button 
+                  fullWidth
+                  disabled={!demoUrl} 
+                  icon={ViewIcon}
+                  onClick={() => demoUrl && window.open(demoUrl, '_blank')}
+                >
+                  View demo
+                </Button>
+              </BlockStack>
+            ) : null}
           </BlockStack>
         </Box>
       </BlockStack>
@@ -442,10 +521,16 @@ export default function Templates() {
         return (
           <Box padding="400">
             <InlineGrid columns={{ xs: 1, sm: 2, md: 3, lg: 4 }} gap="400">
-              <TemplateItem title="Glasses" imageUrl="https://burst.shopifycdn.com/photos/black-classic-glasses.jpg?width=400" />
-              <TemplateItem title="Keychain" imageUrl="https://burst.shopifycdn.com/photos/keychain-with-keys.jpg?width=400" />
-              <TemplateItem title="Bracelet" imageUrl="https://burst.shopifycdn.com/photos/silver-and-gold-bracelets.jpg?width=400" />
-              <TemplateItem title="Mug" imageUrl="https://burst.shopifycdn.com/photos/white-ceramic-mug.jpg?width=400" />
+              {predefinedTemplates.map(pt => (
+                <TemplateItem 
+                  key={pt.id}
+                  id={pt.id}
+                  title={pt.name} 
+                  imageUrl={pt.imageUrl}
+                  demoUrl={pt.demoUrl}
+                  onUseTemplate={() => navigate(`/app/templates/new?predefinedId=${pt.id}`)} 
+                />
+              ))}
             </InlineGrid>
           </Box>
         );
@@ -453,8 +538,16 @@ export default function Templates() {
         return (
           <Box padding="400">
             <InlineGrid columns={{ xs: 1, sm: 2, md: 3, lg: 4 }} gap="400">
-              <TemplateItem title="Photo Frame" imageUrl="https://burst.shopifycdn.com/photos/horse-in-snow.jpg?width=400" />
-              <TemplateItem title="Custom Mug" imageUrl="https://burst.shopifycdn.com/photos/coffee-in-bed.jpg?width=400" />
+              {personalizedTemplates.map(pt => (
+                <TemplateItem 
+                  key={pt.id} 
+                  id={pt.id}
+                  title={pt.name} 
+                  imageUrl={pt.imageUrl} 
+                  demoUrl={pt.demoUrl}
+                  onUseTemplate={() => navigate(`/app/templates/new?predefinedId=${pt.id}`)} 
+                />
+              ))}
             </InlineGrid>
           </Box>
         );
@@ -464,7 +557,12 @@ export default function Templates() {
             {optionSets.length === 0 ? (
               <EmptyState
                 heading="No custom templates found"
-                action={{ content: "Create template", variant: "primary", onAction: () => navigate("/app/templates/new") }}
+                action={{ 
+                  content: "Create template", 
+                  variant: "primary", 
+                  onAction: () => navigate("/app/templates/new"),
+                  disabled: !limitCheck.allowed
+                }}
                 secondaryAction={{ content: "Learn more", onAction: () => window.open('https://help.shopify.com', '_blank') }}
                 image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
               >
@@ -478,8 +576,11 @@ export default function Templates() {
                     id={optSet.id}
                     title={optSet.name} 
                     imageUrl={optSet.imageUrl}
-                    onClick={() => navigate(`/app/templates/${optSet.id}`)}
+                    demoUrl={optSet.handle ? `https://${shopDomain}/products/${optSet.handle}` : undefined}
+                    onEditTemplate={() => navigate(`/app/templates/${optSet.id}`)}
                     onExport={exportTemplate}
+                    onAssignGlobal={isDev ? assignGlobal : null}
+                    onDelete={confirmDelete}
                   />
                 ))}
               </InlineGrid>
@@ -497,6 +598,7 @@ export default function Templates() {
       primaryAction={{
         content: "Create template",
         onAction: () => navigate("/app/templates/new"),
+        disabled: !limitCheck.allowed
       }}
       secondaryActions={[
         {

@@ -1,4 +1,4 @@
-/* eslint-disable no-unused-vars */
+﻿/* eslint-disable no-unused-vars */
 import { useState, useCallback, useRef } from "react";
 import { useLoaderData, useSubmit, useNavigation } from "react-router";
 import { authenticate } from "../shopify.server";
@@ -209,7 +209,6 @@ export default function Settings() {
   const [alignment, setAlignment] = useState(settings.alignment || "left");
   const [position, setPosition] = useState(settings.position || "Above add to cart button");
   const [customSelector, setCustomSelector] = useState(settings.customSelector || ".product__description");
-  const [customPriceSelector, setCustomPriceSelector] = useState(settings.customPriceSelector || "");
   const [filePreview, setFilePreview] = useState(settings.filePreview || "Show image if the uploaded file is a photo, otherwise show link");
   const [colors, setColors] = useState(settings.colors || {
     appBackground: '#ffffff',
@@ -316,7 +315,7 @@ export default function Settings() {
 
   const handleExport = () => {
     const payload = {
-      alignment, position, customSelector, customPriceSelector, filePreview, colors, borders, typography, toggleStates, addonMoneyFormat, addonLabelFormat, customFonts
+      alignment, position, customSelector, filePreview, colors, borders, typography, toggleStates, addonMoneyFormat, addonLabelFormat, customFonts
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -339,7 +338,6 @@ export default function Settings() {
         if (imported.alignment) setAlignment(imported.alignment);
         if (imported.position) setPosition(imported.position);
         if (imported.customSelector) setCustomSelector(imported.customSelector);
-        if (imported.customPriceSelector !== undefined) setCustomPriceSelector(imported.customPriceSelector);
         if (imported.filePreview) setFilePreview(imported.filePreview);
         if (imported.colors) setColors(imported.colors);
         if (imported.borders) setBorders(imported.borders);
@@ -359,7 +357,7 @@ export default function Settings() {
 
   const handleSave = () => {
     const payload = {
-      alignment, position, customSelector, customPriceSelector, filePreview, colors, borders, typography, toggleStates, addonMoneyFormat, addonLabelFormat, customFonts
+      alignment, position, customSelector, filePreview, colors, borders, typography, toggleStates, addonMoneyFormat, addonLabelFormat, customFonts
     };
     submit({ payload: JSON.stringify(payload), shopId: shopId }, { method: "post" });
   };
@@ -810,18 +808,6 @@ export default function Settings() {
                                 value={addonLabelFormat}
                                 onChange={setAddonLabelFormat}
                                 autoComplete="off"
-                              />
-                            </InlineStack>
-                          </Box>
-                          
-                          <Box paddingBlockStart="100" paddingBlockEnd="200">
-                            <InlineStack align="space-between" blockAlign="center">
-                              <Text as="p" variant="bodyMd">Custom Price CSS Selector</Text>
-                              <TextField 
-                                value={customPriceSelector}
-                                onChange={setCustomPriceSelector}
-                                autoComplete="off"
-                                placeholder=".my-unique-price-label"
                               />
                             </InlineStack>
                           </Box>

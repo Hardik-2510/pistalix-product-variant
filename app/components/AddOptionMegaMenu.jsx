@@ -116,10 +116,12 @@ export default function AddOptionMegaMenu({ onSelect, currentTier = "free" }) {
             sections={elementCategories.map((category) => ({
               title: category.title,
               items: category.items.map((item) => {
-                const isPremium = ["Datetime", "File Upload", "Color Picker", "Color Dropdown", "Image Dropdown", "Color Swatch", "Image Swatch", "Pop-up Modal", "HTML", "Switch", "Tabs"].includes(item.label);
-                const isAdvanced = ["Google Font Selector", "Bundle", "Variant Fetcher"].includes(item.label);
+                // Standard-tier elements: unlocked at standard+
+                const isStandardFeature = ["Datetime", "File Upload", "Color Picker", "Color Dropdown", "Image Dropdown", "Color Swatch", "Image Swatch", "Pop-up Modal", "HTML", "Switch", "Tabs"].includes(item.label);
+                // Premium-tier elements: unlocked only at premium
+                const isPremiumFeature = ["Google Font Selector", "Bundle", "Variant Fetcher"].includes(item.label);
                 
-                const locked = (isPremium && currentTier === "free") || (isAdvanced && (currentTier === "free" || currentTier === "basic"));
+                const locked = (isStandardFeature && currentTier === "basic") || (isPremiumFeature && (currentTier === "basic" || currentTier === "standard"));
 
                 const itemContent = (
                   <span style={{ color: locked ? "var(--p-color-text-subdued)" : "inherit", display: "inline-flex", alignItems: "center" }}>

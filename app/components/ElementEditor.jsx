@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import ConditionalLogicEditor from "./ConditionalLogicEditor";
 import TargetedActionsEditor from "./TargetedActionsEditor";
 import ColorPickerInput from "./ColorPickerInput";
+import PlanGate from "./PlanGate";
 import ImageUploadInput from "./ImageUploadInput";
 import { Editor } from "@tinymce/tinymce-react";
 import {
@@ -44,9 +45,9 @@ function ClientRichTextEditor({ value, onChange }) {
           plugins: [
             'advlist', 'autolink', 'lists', 'link', 'image', 'charmap', 'preview',
             'anchor', 'searchreplace', 'visualblocks', 'code', 'fullscreen',
-            'insertdatetime', 'media', 'table', 'code', 'help', 'wordcount'
+            'insertdatetime', 'media', 'table', 'help', 'wordcount'
           ],
-          toolbar: 'blocks | bold italic underline strikethrough | alignleft aligncenter alignright alignjustify | indent outdent | forecolor backcolor | link blockquote | numlist bullist | removeformat | table',
+          toolbar: 'code | blocks | bold italic underline strikethrough | alignleft aligncenter alignright alignjustify | indent outdent | forecolor backcolor | link blockquote | numlist bullist | removeformat | table',
           content_style: 'body { font-family:-apple-system,BlinkMacSystemFont,San Francisco,Segoe UI,Roboto,Helvetica Neue,sans-serif; font-size:14px; margin: 8px; }',
           promotion: false,
           branding: false,
@@ -60,7 +61,7 @@ function ClientRichTextEditor({ value, onChange }) {
  * ElementEditor — Detailed configuration form for a single template element.
  * Matches the Globo Product Options builder UI.
  */
-export default function ElementEditor({ element, allElements = [], onChange, onBack, onDelete, hasConditionalLogic = true }) {
+export default function ElementEditor({ element, allElements = [], onChange, onBack, onDelete, hasConditionalLogic = true, currentTier = "basic" }) {
   const [selectedTab, setSelectedTab] = useState(0);
 
   const typeStr = element.type || "";
@@ -75,9 +76,9 @@ export default function ElementEditor({ element, allElements = [], onChange, onB
   const showPlaceholder = isInput || isNumber || ["Datetime", "Dropdown", "Color Dropdown"].includes(typeStr);
   const showHelpText = !isStatic;
   
-  const showMinMaxChars = ["Text", "Textarea"].includes(typeStr);
+  const showMinMaxChars = ["Text", "Textarea", "Phone"].includes(typeStr);
   const showDefaultValue = isInput || isNumber;
-  const showCharacterCounter = ["Text", "Textarea"].includes(typeStr);
+  const showCharacterCounter = ["Text", "Textarea", "Phone"].includes(typeStr);
 
   const tabs = [
     { id: "basic", content: "Basic Settings" },
@@ -243,8 +244,8 @@ export default function ElementEditor({ element, allElements = [], onChange, onB
                 </Box>
               )}
 
-              {/* Allow Multiple Selections for visually grouped choices */}
-              {["Button", "Color Swatch", "Image Swatch"].includes(element.type) && (
+              {/* Allow Multiple Selections for visually grouped choices and dropdowns */}
+              {["Button", "Color Swatch", "Image Swatch", "Dropdown", "Color Dropdown", "Image Dropdown"].includes(element.type) && (
                  <Box paddingBlockStart="400">
                    <Checkbox
                      label="Allow multiple selections"
@@ -479,6 +480,11 @@ export default function ElementEditor({ element, allElements = [], onChange, onB
                         />
                       </Box>
                     </InlineGrid>
+                    <Checkbox
+                      label="Hide default header & close button"
+                      checked={element.config?.hideHeader || false}
+                      onChange={(val) => handleConfigChange("hideHeader", val)}
+                    />
                     <Box>
                       <InlineStack align="start" blockAlign="center" gap="200" paddingBlockEnd="100">
                         <Text as="p" variant="bodyMd">Modal content</Text>
@@ -798,9 +804,10 @@ export default function ElementEditor({ element, allElements = [], onChange, onB
                 </Box>
               )}
 
+              <PlanGate requiredTier="standard" currentTier={currentTier} featureLabel="Advanced Features">
               <Box paddingBlockStart="400">
                 <BlockStack gap="400">
-                  <Text variant="headingSm" as="h3">Advanced Features (Unlocked)</Text>
+                  <Text variant="headingSm" as="h3">Advanced Features</Text>
 
 
                   {/* Google Font Selector Display Style */}
@@ -833,6 +840,30 @@ export default function ElementEditor({ element, allElements = [], onChange, onB
                           type="number"
                           value={element.config?.maxCharacter || ""}
                           onChange={(val) => handleConfigChange("maxCharacter", val)}
+                          autoComplete="off"
+                        />
+                      </Box>
+                    </InlineStack>
+                  )}
+
+                  {/* Min / Max Value for Number */}
+                  {isNumber && (
+                    <InlineStack gap="400">
+                      <Box width="100%">
+                        <TextField
+                          label="Min value"
+                          type="number"
+                          value={element.config?.minValue || ""}
+                          onChange={(val) => handleConfigChange("minValue", val)}
+                          autoComplete="off"
+                        />
+                      </Box>
+                      <Box width="100%">
+                        <TextField
+                          label="Max value"
+                          type="number"
+                          value={element.config?.maxValue || ""}
+                          onChange={(val) => handleConfigChange("maxValue", val)}
                           autoComplete="off"
                         />
                       </Box>
@@ -894,10 +925,12 @@ export default function ElementEditor({ element, allElements = [], onChange, onB
                   </InlineStack>
                 </BlockStack>
               </Box>
+              </PlanGate>
             </BlockStack>
           )}
 
           {selectedTab === 1 && (
+            <PlanGate requiredTier="premium" currentTier={currentTier} featureLabel="Advanced Settings">
             <BlockStack gap="400">
               {/* Scroll Settings */}
               {["Radio Button", "Checkbox", "Button", "Color Swatch", "Image Swatch"].includes(typeStr) && (
@@ -1205,6 +1238,7 @@ export default function ElementEditor({ element, allElements = [], onChange, onB
                 <Button variant="plain">💬 Chat now!</Button>
               </Banner>
             </BlockStack>
+            </PlanGate>
           )}
         </BlockStack>
       </Box>

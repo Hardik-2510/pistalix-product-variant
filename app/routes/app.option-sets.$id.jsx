@@ -5,7 +5,7 @@ import prisma from "../db.server";
 import crypto from "crypto";
 import OptionSetBuilder from "../components/OptionSetBuilder";
 import { syncOptionSetToMetafields, clearOptionSetMetafields } from "../lib/metafields.server";
-import { requireFeature } from "../lib/features.server";
+import { getShopFeatures } from "../lib/features.server";
 
 /**
  * Loader — fetches existing option set with all elements and product rules.
@@ -25,11 +25,9 @@ export const loader = async ({ request, params }) => {
     throw new Response("Not found", { status: 404 });
   }
 
-  const hasConditionalLogic = await requireFeature(session.shop, "conditionalLogic");
-  const shop = await prisma.shop.findUnique({ where: { shopDomain: session.shop } });
-  const currentTier = shop?.planTier || "free";
+  const { tier: currentTier, features } = await getShopFeatures(session.shop);
 
-  return { optionSet, hasConditionalLogic, currentTier };
+  return { optionSet, currentTier, features };
 };
 
 /**
@@ -181,6 +179,13 @@ export const action = async ({ request, params }) => {
       parsedRules = JSON.parse(formData.get("productRules") || "[]");
     } catch { parsedRules = []; }
 
+    const { features } = await getShopFeatures(session.shop);
+    const maxSections = features.maxSectionsPerOptionSet || 1;
+    if (parsedSections.length > maxSections) {
+      return { error: `Your plan limits you to ${maxSections} section${maxSections > 1 ? 's' : ''} per option set. Please upgrade to Premium for unlimited sections.` };
+    }
+
+
     try {
       await prisma.$transaction(async (tx) => {
         // Update the option set
@@ -310,6 +315,6 @@ export const action = async ({ request, params }) => {
  * Uses the shared OptionSetBuilder component with pre-loaded data.
  */
 export default function OptionSetEdit() {
-  const { optionSet, hasConditionalLogic, currentTier } = useLoaderData();
-  return <OptionSetBuilder initialData={optionSet} isEdit={true} hasConditionalLogic={hasConditionalLogic} currentTier={currentTier} />;
+  const { optionSet, currentTier, features } = useLoaderData();
+  return <OptionSetBuilder initialData={optionSet} isEdit={true} hasConditionalLogic={true} currentTier={currentTier} />;
 }

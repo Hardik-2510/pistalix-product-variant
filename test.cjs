@@ -1,0 +1,1 @@
+const { PrismaClient } = require('@prisma/client'); const prisma = new PrismaClient(); async function run(){ const sets = await prisma.optionSet.findMany({ include: { sections: { include: { elements: true } } } }); console.log(JSON.stringify(sets, null, 2)); } run().catch(console.error).finally(() => prisma.$disconnect());

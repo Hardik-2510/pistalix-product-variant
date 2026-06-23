@@ -62,24 +62,27 @@ function parsePrice(value, currencyCode, baseAmount) {
  * @returns {FunctionRunResult}
  */
 export function cartTransformRun(input) {
+  /** @type {any[]} */
   const operations = [];
 
   for (const line of input.cart.lines) {
-    let customPrice = null;
+    if (!line.finalPrice || !line.finalPrice.value) continue;
 
-    // Access the aliased `finalPrice` property defined in your run.graphql
-    if (line.finalPrice && line.finalPrice.value) {
-      customPrice = parsePrice(line.finalPrice.value, 'USD', 0);
-    }
+    const baseAmount = line.cost && line.cost.amountPerQuantity
+      ? parseFloat(line.cost.amountPerQuantity.amount)
+      : 0;
+    const currencyCode = line.cost && line.cost.amountPerQuantity
+      ? line.cost.amountPerQuantity.currencyCode
+      : 'USD';
 
-    // If no custom price in properties, skip
-    if (customPrice === null || customPrice <= 0) continue;
+    const parsedPrice = parsePrice(line.finalPrice.value, currencyCode, baseAmount);
+    
+    if (parsedPrice === null || parsedPrice <= 0) continue;
 
-    const currencyCode = line.cost?.amountPerQuantity?.currencyCode || 'USD';
     const isZeroDecimal = zeroDecimalCurrencies.has(currencyCode);
+    const amountStr = parsedPrice.toFixed(isZeroDecimal ? 0 : 2);
 
-    const amountStr = String(customPrice.toFixed(isZeroDecimal ? 0 : 2));
-
+    // Apply price override using Cart Transform
     operations.push({
       lineUpdate: {
         cartLineId: line.id,
@@ -94,5 +97,9 @@ export function cartTransformRun(input) {
     });
   }
 
-  return operations.length > 0 ? { operations } : NO_CHANGES;
+  if (operations.length === 0) {
+    return NO_CHANGES;
+  }
+
+  return { operations };
 }

@@ -1,13 +1,35 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
 client_id = "07a0a225a28e52758463e6995952b30b"
+name = "Varify Product Options Variant"
 application_url = "https://example.com"
 embedded = true
-name = "Varify Product Options Variant"
+
+[build]
+automatically_update_urls_on_dev = true
+
+[webhooks]
+api_version = "2026-07"
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/uninstalled"
+  topics = [ "app/uninstalled" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/scopes_update"
+  topics = [ "app/scopes_update" ]
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "write_products,write_metaobjects,write_metaobject_definitions,write_cart_transforms,read_cart_transforms,write_draft_orders,read_draft_orders"
+scopes = "read_cart_transforms,read_draft_orders,write_cart_transforms,write_draft_orders,write_metaobject_definitions,write_metaobjects,write_products"
+
+[auth]
+redirect_urls = [ "https://example.com/api/auth" ]
+
+[app_proxy]
+url = "https://example.com"
+subpath = "product-options"
+prefix = "apps"
 
 [product.metafields.app.demo_info]
 type = "single_line_text_field"
@@ -41,25 +63,3 @@ required = true
 [metaobjects.app.example.fields.description]
 name = "Description"
 type = "multi_line_text_field"
-
-[webhooks]
-api_version = "2026-07"
-
-  [[webhooks.subscriptions]]
-  uri = "/webhooks/app/uninstalled"
-  topics = [ "app/uninstalled" ]
-
-  [[webhooks.subscriptions]]
-  uri = "/webhooks/app/scopes_update"
-  topics = [ "app/scopes_update" ]
-
-[auth]
-redirect_urls = [ "https://example.com/api/auth" ]
-
-[build]
-automatically_update_urls_on_dev = true
-
-[app_proxy]
-url = "https://example.com"
-subpath = "product-options"
-prefix = "apps"
