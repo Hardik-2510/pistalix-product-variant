@@ -2,8 +2,8 @@ const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
 async function main() {
-  const session = await prisma.session.findFirst({ where: { shop: 'follow-docs.myshopify.com' } });
-  const response = await fetch('https://follow-docs.myshopify.com/admin/api/2024-04/graphql.json', {
+  const session = await prisma.session.findFirst({ where: { shop: 'varify-pov.myshopify.com' } });
+  const response = await fetch('https://varify-pov.myshopify.com/admin/api/2024-04/graphql.json', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': session.accessToken },
     body: JSON.stringify({

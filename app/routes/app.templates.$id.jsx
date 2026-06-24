@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import {
   Page,
   Card,
@@ -17,17 +17,20 @@ import {
   Popover,
   ActionList,
 } from "@shopify/polaris";
-import { useNavigate, useFetcher, redirect, useRouteError, useLoaderData } from "react-router";
+import { useNavigate, useFetcher, redirect, useRouteError, isRouteErrorResponse, useLoaderData, data } from "react-router";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import crypto from "crypto";
+
 import SectionBlock from "../components/SectionBlock";
 import TemplateBuilderPreview from "../components/TemplateBuilderPreview";
 import ElementEditor from "../components/ElementEditor";
 import ProductRuleBuilder from "../components/ProductRuleBuilder";
 import { useUnsavedChanges } from "../hooks/useUnsavedChanges";
+import { syncOptionSetToMetafields } from "../lib/metafields.server";
+import { getShopFeatures } from "../lib/features.server";
 
-function ColorSwatchItem({ label, value, onChange }) {
+export function ColorSwatchItem({ label, value, onChange }) {
   return (
     <Box>
       <InlineStack align="start" blockAlign="center" gap="300">
@@ -62,11 +65,8 @@ function ColorSwatchItem({ label, value, onChange }) {
 }
 
 /**
- * Server action — saves the template and all its elements to the database.
+ * Loader — fetches option set or pre-fills a template.
  */
-import { syncOptionSetToMetafields } from "../lib/metafields.server";
-import { getShopFeatures } from "../lib/features.server";
-
 export const loader = async ({ request, params }) => {
   const { session } = await authenticate.admin(request);
   const { tier: currentTier, features } = await getShopFeatures(session.shop);
@@ -77,14 +77,26 @@ export const loader = async ({ request, params }) => {
     
     let optionSet = null;
     if (predefinedId) {
-      const fs = await import("fs");
-      const path = await import("path");
-      
       let predefinedTemplates = [];
-      try { predefinedTemplates = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'app', 'lib', 'predefinedTemplates.json'), 'utf-8')); } catch(e){ /* ignore */ }
-      
       let personalizedTemplates = [];
-      try { personalizedTemplates = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'app', 'lib', 'personalizedTemplates.json'), 'utf-8')); } catch(e){ /* ignore */ }
+      
+      try { 
+        const path = await import("path");
+        const fs = await import("fs/promises");
+        // eslint-disable-next-line no-undef
+        const preDefPath = path.join(process.cwd(), 'app', 'lib', 'predefinedTemplates.json');
+        const preDefData = await fs.readFile(preDefPath, 'utf-8');
+        predefinedTemplates = JSON.parse(preDefData); 
+      } catch (e) { /* ignore */ }
+      
+      try { 
+        const path = await import("path");
+        const fs = await import("fs/promises");
+        // eslint-disable-next-line no-undef
+        const persPath = path.join(process.cwd(), 'app', 'lib', 'personalizedTemplates.json');
+        const persData = await fs.readFile(persPath, 'utf-8');
+        personalizedTemplates = JSON.parse(persData); 
+      } catch (e) { /* ignore */ }
 
       const template = predefinedTemplates.find(t => t.id === predefinedId) || personalizedTemplates.find(t => t.id === predefinedId);
       
@@ -116,269 +128,178 @@ export const loader = async ({ request, params }) => {
 export function ErrorBoundary() {
   const error = useRouteError();
   console.error("Template Builder Error:", error);
+
+  let title = "Error loading template builder";
+  let message = "An unexpected error occurred. Please try again.";
+
+  if (isRouteErrorResponse(error)) {
+    if (error.status === 404) {
+      title = "Template not found";
+      message = "This template does not exist or has been deleted.";
+    } else if (error.status === 403) {
+      title = "Access denied";
+      message = "You do not have permission to view this template.";
+    } else if (error.status >= 500) {
+      title = "Server error";
+      message = "The server encountered an error. Please try again in a moment.";
+    } else {
+      message = error.data || `Error ${error.status}`;
+    }
+  } else if (error instanceof Error) {
+    message = error.message;
+  }
+
   return (
     <Page>
-      <Banner tone="critical" title="Error loading template builder">
-        <p>{error.message || "Unknown error occurred"}</p>
+      <Banner tone="critical" title={title}>
+        <p>{message}</p>
       </Banner>
     </Page>
   );
 }
 
+/**
+ * Server action — saves the template and all its elements to the database.
+ */
 export const action = async ({ request, params }) => {
   const { session, admin } = await authenticate.admin(request);
-  const formData = await request.formData();
-  const name = formData.get("name") || "New Option Set";
-  const elementsJson = formData.get("elements") || "[]";
-  const sectionsJson = formData.get("sections") || "[]";
-
-  let parsedElements = [];
-  let parsedSections = [];
+  
   try {
-    parsedElements = JSON.parse(elementsJson);
-    parsedSections = JSON.parse(sectionsJson);
-  } catch {
-    parsedElements = [];
-    parsedSections = [];
-  }
-
-  const { features } = await getShopFeatures(session.shop);
-  const maxSections = features.maxSectionsPerOptionSet || 1;
-  if (parsedSections.length > maxSections) {
-    return { error: `Your plan limits you to ${maxSections} section${maxSections > 1 ? 's' : ''} per template. Please upgrade to Premium for unlimited sections.` };
-  }
-
-  // Ensure Shop exists
-  await prisma.shop.upsert({
-    where: { shopDomain: session.shop },
-    update: {},
-    create: { shopDomain: session.shop },
-  });
-
-  if (params.id && params.id !== "new") {
-    // Clear out existing sections/elements completely to rebuild
-    await prisma.section.deleteMany({ where: { optionSetId: params.id } });
-    await prisma.element.deleteMany({ where: { optionSetId: params.id } });
-    await prisma.productRule.deleteMany({ where: { optionSetId: params.id } });
-
+    const formData = await request.formData();
+    const name = formData.get("name") || "New Option Set";
+    
+    let parsedElements = [];
+    let parsedSections = [];
     let parsedRules = [];
-    try {
-      parsedRules = JSON.parse(formData.get("productRules") || "[]");
-    } catch { parsedRules = []; }
 
-    if (parsedRules.length > 0) {
-      await prisma.productRule.createMany({
-        data: parsedRules.map((r) => ({
-          optionSetId: params.id,
-          targetType: r.ruleType,
-          targetValues: r.value ? String(r.value) : "[]",
-        })),
-      });
+    try {
+      parsedElements = JSON.parse(formData.get("elements") || "[]");
+      parsedSections = JSON.parse(formData.get("sections") || "[]");
+      parsedRules = JSON.parse(formData.get("productRules") || "[]");
+    } catch {
+      return data({ error: "Invalid data format received." }, { status: 400 });
     }
 
-    await prisma.optionSet.update({
-      where: { id: params.id },
-      data: { name, status: "TEMPLATE" }
+    const { features } = await getShopFeatures(session.shop);
+    const maxSections = features.maxSectionsPerOptionSet || 1;
+    if (parsedSections.length > maxSections) {
+      return data({ error: `Your plan limits you to ${maxSections} section(s) per template. Please upgrade to Premium.` }, { status: 400 });
+    }
+
+    // Ensure Shop exists
+    await prisma.shop.upsert({
+      where: { shopDomain: session.shop },
+      update: {},
+      create: { shopDomain: session.shop },
     });
 
-    // Remap section and element IDs to preserve conditional logic and targeted actions
+    const isUpdate = params.id && params.id !== "new";
+    let optionSetId = params.id;
+
+    if (isUpdate) {
+      // Clear out existing nested records for rebuild
+      await prisma.section.deleteMany({ where: { optionSetId } });
+      await prisma.element.deleteMany({ where: { optionSetId } });
+      await prisma.productRule.deleteMany({ where: { optionSetId } });
+
+      await prisma.optionSet.update({
+        where: { id: optionSetId },
+        data: { name, status: "TEMPLATE" }
+      });
+    } else {
+      const newOptionSet = await prisma.optionSet.create({
+        data: { shopId: session.shop, name, status: "TEMPLATE" },
+      });
+      optionSetId = newOptionSet.id;
+    }
+
+    // Remap section and element IDs to preserve logical relations
     const secIdMap = {};
     for (const sec of parsedSections) {
-      if (sec.id && sec.id.startsWith("sec_")) {
-        secIdMap[sec.id] = sec.id;
-      } else {
-        secIdMap[sec.id] = `sec_${crypto.randomUUID().replace(/-/g, "")}`;
-      }
+      secIdMap[sec.id] = (isUpdate && sec.id.startsWith("sec_")) 
+        ? sec.id 
+        : `sec_${crypto.randomUUID().replace(/-/g, "")}`;
     }
 
     const elIdMap = {};
     for (const el of parsedElements) {
-      if (el.id && el.id.startsWith("el_")) {
-        elIdMap[el.id] = el.id;
-      } else {
-        elIdMap[el.id] = `el_${crypto.randomUUID().replace(/-/g, "")}`;
-      }
+      elIdMap[el.id] = (isUpdate && el.id.startsWith("el_")) 
+        ? el.id 
+        : `el_${crypto.randomUUID().replace(/-/g, "")}`;
     }
 
+    // Clean and link configs based on new ID mappings
     for (const el of parsedElements) {
       el.newId = elIdMap[el.id];
       if (el.config) {
-        if (el.config.conditionalLogic === false) {
-          el.config.conditions = [];
-        }
-        if (el.config.targetOtherFields === false) {
-          el.config.pushRules = [];
-        }
+        if (el.config.conditionalLogic === false) el.config.conditions = [];
+        if (el.config.targetOtherFields === false) el.config.pushRules = [];
         if (el.config.sectionId && secIdMap[el.config.sectionId]) {
           el.config.sectionId = secIdMap[el.config.sectionId];
         }
         if (el.config.conditions) {
-          for (const cond of el.config.conditions) {
-            if (elIdMap[cond.sourceElementId]) {
-              cond.sourceElementId = elIdMap[cond.sourceElementId];
-            }
-          }
+          el.config.conditions.forEach(cond => {
+            if (elIdMap[cond.sourceElementId]) cond.sourceElementId = elIdMap[cond.sourceElementId];
+          });
         }
         if (el.config.pushRules) {
-          for (const rule of el.config.pushRules) {
-            if (elIdMap[rule.targetElementId]) {
-              rule.targetElementId = elIdMap[rule.targetElementId];
-            }
-          }
+          el.config.pushRules.forEach(rule => {
+            if (elIdMap[rule.targetElementId]) rule.targetElementId = elIdMap[rule.targetElementId];
+          });
         }
       }
     }
 
-    for (let idx = 0; idx < parsedSections.length; idx++) {
-      const sec = parsedSections[idx];
+    // Prepare batch inserts
+    const newSectionsData = parsedSections.map((sec, idx) => ({
+      id: secIdMap[sec.id],
+      optionSetId,
+      title: sec.title || `Section ${idx + 1}`,
+      order: idx,
+      visible: sec.visible !== false,
+      styles: JSON.stringify(sec.styles || {})
+    }));
+
+    const newElementsData = [];
+    parsedSections.forEach((sec) => {
       const newSecId = secIdMap[sec.id];
-      
-      await prisma.section.create({
-        data: {
-          id: newSecId,
-          optionSetId: params.id,
-          title: sec.title || `Section ${idx + 1}`,
-          order: idx,
-          visible: sec.visible !== false,
-          styles: JSON.stringify(sec.styles || {})
-        }
-      });
-
       const sectionElements = parsedElements.filter(el => el.sectionId === sec.id);
-      if (sectionElements.length > 0) {
-        await prisma.element.createMany({
-          data: sectionElements.map((el, elIdx) => {
-            const updatedConfig = { ...(el.config || {}), sectionId: newSecId };
-            return {
-              id: el.newId,
-              optionSetId: params.id,
-              sectionId: newSecId,
-              type: el.type || "Text",
-              label: el.label || "Option",
-              subtext: el.placeholder || el.config?.subtext || null,
-              required: el.required || false,
-              order: elIdx,
-              config: JSON.stringify(updatedConfig),
-            };
-          }),
-        });
-      }
-    }
-
-    // Trigger Metafield Sync
-    try {
-      await syncOptionSetToMetafields(params.id, admin);
-    } catch (err) {
-      console.error("Metafield Sync Failed:", err);
-    }
-
-    return { success: true };
-  }
-
-  let parsedRules = [];
-  try {
-    parsedRules = JSON.parse(formData.get("productRules") || "[]");
-  } catch { parsedRules = []; }
-
-  const optionSet = await prisma.optionSet.create({
-    data: {
-      shopId: session.shop,
-      name,
-      status: "TEMPLATE",
-    },
-  });
-
-  if (parsedRules.length > 0) {
-    await prisma.productRule.createMany({
-      data: parsedRules.map((r) => ({
-        optionSetId: optionSet.id,
-        targetType: r.ruleType,
-        targetValues: r.value ? String(r.value) : "[]",
-      })),
-    });
-  }
-  // Generate new IDs for all sections and elements to avoid conflicts
-  const secIdMap = {};
-  for (const sec of parsedSections) {
-    secIdMap[sec.id] = `sec_${crypto.randomUUID().replace(/-/g, "")}`;
-  }
-
-  const elIdMap = {};
-  for (const el of parsedElements) {
-    elIdMap[el.id] = `el_${crypto.randomUUID().replace(/-/g, "")}`;
-  }
-
-  for (const el of parsedElements) {
-    el.newId = elIdMap[el.id];
-    if (el.config) {
-      if (el.config.conditionalLogic === false) {
-        el.config.conditions = [];
-      }
-      if (el.config.targetOtherFields === false) {
-        el.config.pushRules = [];
-      }
-      if (el.config.sectionId && secIdMap[el.config.sectionId]) {
-        el.config.sectionId = secIdMap[el.config.sectionId];
-      }
-      if (el.config.conditions) {
-        for (const cond of el.config.conditions) {
-          if (elIdMap[cond.sourceElementId]) {
-            cond.sourceElementId = elIdMap[cond.sourceElementId];
-          }
-        }
-      }
-      if (el.config.pushRules) {
-        for (const rule of el.config.pushRules) {
-          if (elIdMap[rule.targetElementId]) {
-            rule.targetElementId = elIdMap[rule.targetElementId];
-          }
-        }
-      }
-    }
-  }
-
-  for (let idx = 0; idx < parsedSections.length; idx++) {
-    const sec = parsedSections[idx];
-    const newSecId = secIdMap[sec.id];
-    await prisma.section.create({
-      data: {
-        id: newSecId,
-        optionSetId: optionSet.id,
-        title: `Section ${idx + 1}`,
-        order: idx,
-        visible: sec.visible !== false,
-        styles: JSON.stringify(sec.styles || {})
-      }
-    });
-
-    const sectionElements = parsedElements.filter(el => el.sectionId === sec.id);
-    for (let elIdx = 0; elIdx < sectionElements.length; elIdx++) {
-      const el = sectionElements[elIdx];
-      const updatedConfig = { ...(el.config || {}), sectionId: newSecId };
-      await prisma.element.create({
-        data: {
+      
+      sectionElements.forEach((el, elIdx) => {
+        newElementsData.push({
           id: el.newId,
-          optionSetId: optionSet.id,
+          optionSetId,
           sectionId: newSecId,
           type: el.type || "Text",
           label: el.label || "Option",
-          subtext: el.subtext || null,
+          subtext: el.placeholder || el.subtext || el.config?.subtext || null,
           required: el.required || false,
           order: elIdx,
-          config: JSON.stringify(updatedConfig),
-        }
+          config: JSON.stringify({ ...(el.config || {}), sectionId: newSecId }),
+        });
       });
-    }
-  }
+    });
 
-  // Trigger Metafield Sync
-  try {
-    await syncOptionSetToMetafields(optionSet.id, admin);
-  } catch (err) {
-    console.error("Metafield Sync Failed:", err);
-  }
+    const newRulesData = parsedRules.map((r) => ({
+      optionSetId,
+      targetType: r.ruleType,
+      targetValues: r.value ? String(r.value) : "[]",
+    }));
 
-  return redirect("/app/templates");
+    // Execute bulk creations
+    if (newRulesData.length > 0) await prisma.productRule.createMany({ data: newRulesData });
+    if (newSectionsData.length > 0) await prisma.section.createMany({ data: newSectionsData });
+    if (newElementsData.length > 0) await prisma.element.createMany({ data: newElementsData });
+
+    // Background Metafield Sync
+    syncOptionSetToMetafields(optionSetId, admin).catch(err => console.error("Metafield Sync Background Error:", err));
+
+    return isUpdate ? { success: true } : redirect("/app/templates");
+
+  } catch (error) {
+    console.error("Action Error:", error);
+    return data({ error: "Failed to save template. Please try again." }, { status: 500 });
+  }
 };
 
 /**
@@ -398,13 +319,9 @@ export default function NewTemplate() {
     }
   }, [fetcher.state, fetcher.data]);
 
-  // Template metadata
   const [name, setName] = useState(optionSet?.name || "New Option Set");
-
-  // Builder tabs
   const [builderTab, setBuilderTab] = useState(0);
 
-  // Parse server data if editing
   const initialSections = optionSet?.sections ? optionSet.sections.map(s => ({
     id: s.id,
     collapsed: false,
@@ -422,18 +339,15 @@ export default function NewTemplate() {
     config: e.config ? JSON.parse(e.config) : {}
   })) : [];
 
-  // Sections & elements state
   const [sections, setSections] = useState(initialSections);
   const [elements, setElements] = useState(initialElements);
   const [productRules, setProductRules] = useState(() => {
-    if (optionSet?.productRules) {
-      return optionSet.productRules.map(r => ({
-        ruleType: r.targetType,
-        value: r.targetValues !== "[]" ? r.targetValues : null,
-      }));
-    }
-    return [];
+    return optionSet?.productRules ? optionSet.productRules.map(r => ({
+      ruleType: r.targetType,
+      value: r.targetValues !== "[]" ? r.targetValues : null,
+    })) : [];
   });
+  
   const [activeElementId, setActiveElementId] = useState(null);
 
   const currentState = JSON.stringify({ name, sections, elements, productRules });
@@ -448,9 +362,7 @@ export default function NewTemplate() {
     }
   }, [fetcher.state, fetcher.data, currentState]);
 
-  const handleUpdateRules = useCallback((newRules) => {
-    setProductRules(newRules);
-  }, []);
+  const handleUpdateRules = useCallback((newRules) => setProductRules(newRules), []);
 
   const [langPopoverActive, setLangPopoverActive] = useState(false);
   const [menuPopoverActive, setMenuPopoverActive] = useState(false);
@@ -464,97 +376,50 @@ export default function NewTemplate() {
     textColor: "#000000",
   });
 
-  // ─── Section Management ─────────────────────────────────────────────
+  const generateLocalId = (prefix) => `${prefix}-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
 
+  // ─── Section Management ─────────────────────────────────────────────
   const handleAddSection = useCallback(() => {
     const maxSections = currentTier === "premium" ? Infinity : (currentTier === "standard" ? 3 : 1);
     if (sections.length >= maxSections) {
+      const msg = `Your plan limits you to ${maxSections} section(s). Upgrade to Premium for unlimited sections.`;
       if (typeof shopify !== 'undefined' && shopify.toast) {
-        shopify.toast.show(`Your plan limits you to ${maxSections} section${maxSections > 1 ? 's' : ''}. Upgrade to Premium for unlimited sections.`, { isError: true });
+        shopify.toast.show(msg, { isError: true });
       } else {
-        alert(`Your plan limits you to ${maxSections} section${maxSections > 1 ? 's' : ''}. Upgrade to Premium for unlimited sections.`);
+        alert(msg);
       }
       return;
     }
-
-    const newSection = {
-      id: `section-${Date.now()}`,
-      collapsed: false,
-    };
-    setSections((prev) => [...prev, newSection]);
+    setSections((prev) => [...prev, { id: generateLocalId("section"), collapsed: false }]);
   }, [currentTier, sections.length]);
 
   const handleDeleteSection = useCallback((sectionId) => {
     setSections((prev) => prev.filter((s) => s.id !== sectionId));
-    // Also remove all elements belonging to this section
     setElements((prev) => prev.filter((el) => el.sectionId !== sectionId));
   }, []);
 
   const handleToggleCollapse = useCallback((sectionId) => {
-    setSections((prev) =>
-      prev.map((s) =>
-        s.id === sectionId ? { ...s, collapsed: !s.collapsed } : s
-      )
-    );
+    setSections((prev) => prev.map((s) => s.id === sectionId ? { ...s, collapsed: !s.collapsed } : s));
   }, []);
 
   const handleToggleVisibility = useCallback((sectionId) => {
-    setSections((prev) =>
-      prev.map((s) =>
-        s.id === sectionId ? { ...s, visible: s.visible === false ? true : false } : s
-      )
-    );
-  }, []);
-
-  // ─── Element Management ─────────────────────────────────────────────
-
-  const handleAddElement = useCallback((sectionId, item) => {
-    const newElementId = `el-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
-    const newElement = {
-      id: newElementId,
-      sectionId,
-      type: item.type,
-      label: item.label,
-      subtext: item.subtext,
-      icon: item.icon,
-      position: 0,
-      config: {},
-    };
-    setElements((prev) => {
-      const sectionElements = prev.filter((el) => el.sectionId === sectionId);
-      newElement.position = sectionElements.length;
-      return [...prev, newElement];
-    });
-    setActiveElementId(newElementId);
-  }, []);
-
-  const handleDeleteElement = useCallback((elementId) => {
-    setElements((prev) => prev.filter((el) => el.id !== elementId));
-    setActiveElementId((prev) => (prev === elementId ? null : prev));
-  }, []);
-
-  const handleUpdateElement = useCallback((elementId, newElementData) => {
-    setElements((prev) =>
-      prev.map((el) => (el.id === elementId ? newElementData : el))
-    );
+    setSections((prev) => prev.map((s) => s.id === sectionId ? { ...s, visible: !s.visible } : s));
   }, []);
 
   const handleDuplicateSection = useCallback((sectionId) => {
     const maxSections = currentTier === "premium" ? Infinity : (currentTier === "standard" ? 3 : 1);
     if (sections.length >= maxSections) {
-      if (typeof shopify !== 'undefined' && shopify.toast) {
-        shopify.toast.show(`Your plan limits you to ${maxSections} section${maxSections > 1 ? 's' : ''}. Upgrade to Premium for unlimited sections.`, { isError: true });
-      } else {
-        alert(`Your plan limits you to ${maxSections} section${maxSections > 1 ? 's' : ''}. Upgrade to Premium for unlimited sections.`);
-      }
+      const msg = `Your plan limits you to ${maxSections} section(s). Upgrade to Premium for unlimited sections.`;
+      if (typeof shopify !== 'undefined' && shopify.toast) shopify.toast.show(msg, { isError: true });
+      else alert(msg);
       return;
     }
 
     const sectionIndex = sections.findIndex(s => s.id === sectionId);
     if (sectionIndex === -1) return;
-    const originalSection = sections[sectionIndex];
-    const newSectionId = `section-${Date.now()}`;
-    const newSection = { ...originalSection, id: newSectionId };
+    
+    const newSectionId = generateLocalId("section");
+    const newSection = { ...sections[sectionIndex], id: newSectionId };
     
     setSections(prev => {
       const newArray = [...prev];
@@ -563,31 +428,14 @@ export default function NewTemplate() {
     });
 
     setElements(prev => {
-      const sectionElements = prev.filter(el => el.sectionId === sectionId);
-      const newElements = sectionElements.map(el => ({
+      const newElements = prev.filter(el => el.sectionId === sectionId).map(el => ({
         ...el,
-        id: `el-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        id: generateLocalId("el"),
         sectionId: newSectionId,
       }));
       return [...prev, ...newElements];
     });
   }, [currentTier, sections]);
-
-  const handleDuplicateElement = useCallback((elementId) => {
-    const elementIndex = elements.findIndex(el => el.id === elementId);
-    if (elementIndex === -1) return;
-    const originalElement = elements[elementIndex];
-    const newElement = {
-      ...originalElement,
-      id: `el-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-    };
-    
-    setElements(prev => {
-      const newArray = [...prev];
-      newArray.splice(elementIndex + 1, 0, newElement);
-      return newArray;
-    });
-  }, [elements]);
 
   const handleMoveSectionUp = useCallback((sectionId) => {
     setSections(prev => {
@@ -609,19 +457,55 @@ export default function NewTemplate() {
     });
   }, []);
 
+  // ─── Element Management ─────────────────────────────────────────────
+  const handleAddElement = useCallback((sectionId, item) => {
+    const newElementId = generateLocalId("el");
+    setElements((prev) => {
+      const position = prev.filter((el) => el.sectionId === sectionId).length;
+      return [...prev, {
+        id: newElementId,
+        sectionId,
+        type: item.type,
+        label: item.label,
+        subtext: item.subtext,
+        icon: item.icon,
+        position,
+        config: {},
+      }];
+    });
+    setActiveElementId(newElementId);
+  }, []);
+
+  const handleDeleteElement = useCallback((elementId) => {
+    setElements((prev) => prev.filter((el) => el.id !== elementId));
+    setActiveElementId((prev) => (prev === elementId ? null : prev));
+  }, []);
+
+  const handleUpdateElement = useCallback((elementId, newElementData) => {
+    setElements((prev) => prev.map((el) => (el.id === elementId ? newElementData : el)));
+  }, []);
+
+  const handleDuplicateElement = useCallback((elementId) => {
+    const elementIndex = elements.findIndex(el => el.id === elementId);
+    if (elementIndex === -1) return;
+    
+    const newElement = { ...elements[elementIndex], id: generateLocalId("el") };
+    setElements(prev => {
+      const newArray = [...prev];
+      newArray.splice(elementIndex + 1, 0, newElement);
+      return newArray;
+    });
+  }, [elements]);
+
   const handleMoveElementUp = useCallback((elementId) => {
     setElements(prev => {
       const idx = prev.findIndex(el => el.id === elementId);
-      if (idx === -1) return prev;
+      if (idx <= 0) return prev;
+      
       const element = prev[idx];
-      let prevIdx = -1;
-      for (let i = idx - 1; i >= 0; i--) {
-        if (prev[i].sectionId === element.sectionId) {
-          prevIdx = i;
-          break;
-        }
-      }
+      const prevIdx = prev.slice(0, idx).findLastIndex(el => el.sectionId === element.sectionId);
       if (prevIdx === -1) return prev;
+      
       const arr = [...prev];
       [arr[idx], arr[prevIdx]] = [arr[prevIdx], arr[idx]];
       return arr;
@@ -631,39 +515,20 @@ export default function NewTemplate() {
   const handleMoveElementDown = useCallback((elementId) => {
     setElements(prev => {
       const idx = prev.findIndex(el => el.id === elementId);
-      if (idx === -1) return prev;
+      if (idx === -1 || idx === prev.length - 1) return prev;
+      
       const element = prev[idx];
-      let nextIdx = -1;
-      for (let i = idx + 1; i < prev.length; i++) {
-        if (prev[i].sectionId === element.sectionId) {
-          nextIdx = i;
-          break;
-        }
-      }
-      if (nextIdx === -1) return prev;
+      const nextRelativeIdx = prev.slice(idx + 1).findIndex(el => el.sectionId === element.sectionId);
+      if (nextRelativeIdx === -1) return prev;
+      
+      const nextIdx = idx + 1 + nextRelativeIdx;
       const arr = [...prev];
       [arr[idx], arr[nextIdx]] = [arr[nextIdx], arr[idx]];
       return arr;
     });
   }, []);
 
-  // ─── Tab Definitions ────────────────────────────────────────────────
-
-  const tabs = [
-    {
-      id: "elements",
-      content: (
-        <InlineStack gap="200" blockAlign="center">
-          <span>Elements</span>
-          <Badge tone="info">{elements.length}</Badge>
-        </InlineStack>
-      ),
-    },
-    { id: "product-rules", content: "Product rules" },
-  ];
-
-  // ─── Discard Handler ────────────────────────────────────────────────
-
+  // ─── Modal & Action Handlers ────────────────────────────────────────
   const handleDiscard = useCallback(() => {
     setName("New Option Set");
     setElements([]);
@@ -700,45 +565,43 @@ export default function NewTemplate() {
     setActiveStyleSectionId(null);
   }, [activeStyleSectionId, modalStyles]);
 
-  // ─── Render ─────────────────────────────────────────────────────────
+  const handleSave = () => {
+    const formData = new FormData();
+    formData.append("name", name);
+    formData.append("elements", JSON.stringify(elements));
+    formData.append("sections", JSON.stringify(sections));
+    formData.append("productRules", JSON.stringify(productRules));
+    fetcher.submit(formData, { method: "POST" });
+  };
+
+  const tabs = useMemo(() => [
+    {
+      id: "elements",
+      content: (
+        <InlineStack gap="200" blockAlign="center">
+          <span>Elements</span>
+          <Badge tone="info">{elements.length}</Badge>
+        </InlineStack>
+      ),
+    },
+    { id: "product-rules", content: "Product rules" },
+  ], [elements.length]);
 
   return (
     <Page>
       {/* ═══ Header Bar ═══ */}
       <Box paddingBlockEnd="400">
         <InlineStack align="space-between" blockAlign="center" gap="300">
-          {/* Left: Back + Title + Badge */}
           <InlineStack gap="300" blockAlign="center">
-            <Button
-              variant="tertiary"
-              onClick={() => navigate("/app/templates")}
-            >
-              ← Back
-            </Button>
-            <Box
-              background="bg-fill-magic"
-              borderRadius="200"
-              minWidth="32px"
-              minHeight="32px"
-              padding="100"
-            >
-              <Text as="span" fontWeight="bold" alignment="center" variant="headingSm">
-                T
-              </Text>
-            </Box>
-            <TextField
-              label="Template name"
-              value={name}
-              onChange={setName}
-              autoComplete="off"
-              labelHidden
-            />
+            <Button variant="tertiary" onClick={() => navigate("/app/templates")}>← Back</Button>
+            <div style={{ background: "var(--p-color-bg-fill-magic)", borderRadius: "var(--p-border-radius-200)", minWidth: "32px", minHeight: "32px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <Text as="span" fontWeight="bold" variant="headingSm">T</Text>
+            </div>
+            <TextField label="Template name" value={name} onChange={setName} autoComplete="off" labelHidden />
             <Badge tone="info">Template</Badge>
           </InlineStack>
 
-          {/* Right: Actions */}
           <InlineStack gap="200" blockAlign="center">
-            {/* Language */}
             <Popover
               active={langPopoverActive}
               activator={<Button disclosure onClick={() => setLangPopoverActive(prev => !prev)}>English</Button>}
@@ -748,10 +611,8 @@ export default function NewTemplate() {
               <ActionList items={[{ content: 'English' }, { content: 'French' }]} />
             </Popover>
 
-            {/* Mobile preview */}
             <Button icon={<span style={{fontSize: "18px", lineHeight: "20px"}}>📱</span>} />
 
-            {/* More Menu */}
             <Popover
               active={menuPopoverActive}
               activator={<Button onClick={() => setMenuPopoverActive(prev => !prev)}>•••</Button>}
@@ -767,10 +628,8 @@ export default function NewTemplate() {
                     onAction: () => {
                       if (optionSet?.id) {
                         navigate(`/app/option-sets/new?templateId=${optionSet.id}`);
-                      } else {
-                        if (typeof shopify !== 'undefined' && shopify.toast) {
-                          shopify.toast.show("Please save the template first");
-                        }
+                      } else if (typeof shopify !== 'undefined' && shopify.toast) {
+                        shopify.toast.show("Please save the template first");
                       }
                       setMenuPopoverActive(false);
                     }
@@ -780,37 +639,21 @@ export default function NewTemplate() {
               />
             </Popover>
 
-            <Button variant="tertiary" onClick={handleDiscard}>
-              Discard
-            </Button>
-            <Button
-              variant="primary"
-              loading={isSaving}
-              onClick={() => {
-                const formData = new FormData();
-                formData.append("name", name);
-                formData.append("elements", JSON.stringify(elements));
-                formData.append("sections", JSON.stringify(sections));
-                formData.append("productRules", JSON.stringify(productRules));
-                fetcher.submit(formData, { method: "POST" });
-              }}
-            >
-              Save
-            </Button>
+            <Button variant="tertiary" onClick={handleDiscard}>Discard</Button>
+            <Button variant="primary" loading={isSaving} onClick={handleSave}>Save</Button>
           </InlineStack>
         </InlineStack>
       </Box>
 
       {fetcher.data?.error && (
         <Box paddingBlockEnd="400">
-          <Banner tone="critical">
-            <p>{fetcher.data.error}</p>
-          </Banner>
+          <Banner tone="critical"><p>{fetcher.data.error}</p></Banner>
         </Box>
       )}
 
       {/* ═══ Main Workspace ═══ */}
       <InlineGrid columns={{ xs: 1, md: ["twoThirds", "oneThird"] }} gap="400">
+        
         {/* ─── Left Column: Builder ─── */}
         <Box>
           {activeElementId ? (
@@ -826,19 +669,10 @@ export default function NewTemplate() {
             <Card padding="0">
               <Tabs tabs={tabs} selected={builderTab} onSelect={setBuilderTab}>
                 <Box padding="400">
-                  {/* Elements Tab */}
                   {builderTab === 0 && (
                     <BlockStack gap="400">
-                      {/* Option Set Title Input */}
                       <Box>
-                        <Text
-                          as="p"
-                          variant="bodySm"
-                          fontWeight="semibold"
-                          tone="subdued"
-                        >
-                          OPTION SET TITLE
-                        </Text>
+                        <Text as="p" variant="bodySm" fontWeight="semibold" tone="subdued">OPTION SET TITLE</Text>
                         <Box paddingBlockStart="200">
                           <TextField
                             value={name}
@@ -850,19 +684,14 @@ export default function NewTemplate() {
                           />
                         </Box>
                       </Box>
-
                       <Divider />
-
-                      {/* Section Blocks */}
                       <BlockStack gap="400">
                         {sections.map((section, idx) => (
                           <SectionBlock
                             key={section.id}
                             section={section}
                             sectionIndex={idx}
-                            elements={elements.filter(
-                              (el) => el.sectionId === section.id
-                            )}
+                            elements={elements.filter((el) => el.sectionId === section.id)}
                             onAddElement={handleAddElement}
                             onDeleteElement={handleDeleteElement}
                             onDeleteSection={handleDeleteSection}
@@ -881,29 +710,22 @@ export default function NewTemplate() {
                           />
                         ))}
                       </BlockStack>
-
-                    {/* Add Section Button */}
-                    <Button variant="plain" onClick={handleAddSection}>
-                      <InlineStack gap="200" blockAlign="center">
-                        <Text as="span" fontWeight="semibold">📄</Text>
-                        <Text as="span" fontWeight="medium">
-                          Add section {currentTier !== "premium" ? "⭐" : ""}
-                        </Text>
-                      </InlineStack>
-                    </Button>
-                  </BlockStack>
-                )}
-
-                {/* Product Rules Tab */}
-                {builderTab === 1 && (
-                  <ProductRuleBuilder
-                    rules={productRules}
-                    onUpdate={handleUpdateRules}
-                  />
-                )}
-              </Box>
-            </Tabs>
-          </Card>
+                      <Button variant="plain" onClick={handleAddSection}>
+                        <InlineStack gap="200" blockAlign="center">
+                          <Text as="span" fontWeight="semibold">📄</Text>
+                          <Text as="span" fontWeight="medium">
+                            Add section {currentTier !== "premium" ? "⭐" : ""}
+                          </Text>
+                        </InlineStack>
+                      </Button>
+                    </BlockStack>
+                  )}
+                  {builderTab === 1 && (
+                    <ProductRuleBuilder rules={productRules} onUpdate={handleUpdateRules} />
+                  )}
+                </Box>
+              </Tabs>
+            </Card>
           )}
         </Box>
 
@@ -911,9 +733,7 @@ export default function NewTemplate() {
         <Box>
           <Card padding="400">
             <BlockStack gap="300">
-              <Text variant="headingSm" as="h3" alignment="center">
-                Live Preview
-              </Text>
+              <Text variant="headingSm" as="h3" alignment="center">Live Preview</Text>
               <Divider />
               <TemplateBuilderPreview
                 elements={elements}
@@ -929,37 +749,38 @@ export default function NewTemplate() {
       <Modal
         open={styleModalOpen}
         onClose={handleCloseStyleModal}
-        title="Section style settings"
+        title="Section Style Settings"
         primaryAction={{
-          content: 'Done',
+          content: 'Save',
           onAction: handleCloseStyleModal,
         }}
+        secondaryActions={[
+          {
+            content: 'Cancel',
+            onAction: handleCloseStyleModal,
+          },
+        ]}
       >
         <Modal.Section>
           <BlockStack gap="400">
-            <ColorSwatchItem 
-              label="Background color" 
-              value={modalStyles.backgroundColor} 
-              onChange={(val) => setModalStyles(prev => ({ ...prev, backgroundColor: val }))} 
+            <TextField
+              label="Background Color"
+              value={modalStyles.backgroundColor}
+              onChange={(val) => setModalStyles(prev => ({ ...prev, backgroundColor: val }))}
+              autoComplete="off"
             />
-            
-            <Box>
-              <Text as="p" fontWeight="bold">Padding</Text>
-              <Box paddingBlockStart="200">
-                <TextField 
-                  type="number" 
-                  value={modalStyles.padding} 
-                  onChange={(val) => setModalStyles(prev => ({ ...prev, padding: val }))} 
-                  suffix="px" 
-                  autoComplete="off" 
-                />
-              </Box>
-            </Box>
-
-            <ColorSwatchItem 
-              label="Text color" 
-              value={modalStyles.textColor} 
-              onChange={(val) => setModalStyles(prev => ({ ...prev, textColor: val }))} 
+            <TextField
+              label="Text Color"
+              value={modalStyles.textColor}
+              onChange={(val) => setModalStyles(prev => ({ ...prev, textColor: val }))}
+              autoComplete="off"
+            />
+            <TextField
+              label="Padding"
+              type="number"
+              value={modalStyles.padding}
+              onChange={(val) => setModalStyles(prev => ({ ...prev, padding: val }))}
+              autoComplete="off"
             />
           </BlockStack>
         </Modal.Section>

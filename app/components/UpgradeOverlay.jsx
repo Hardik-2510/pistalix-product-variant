@@ -1,4 +1,4 @@
-import { Box, Text, Button, InlineStack, BlockStack, Badge } from "@shopify/polaris";
+import { Text, Button, InlineStack, BlockStack, Badge } from "@shopify/polaris";
 import { useNavigate } from "react-router";
 
 const PLAN_DISPLAY = {
@@ -97,7 +97,7 @@ export default function UpgradeOverlay({ requiredPlan, currentPlan, featureLabel
                 <Badge tone={planInfo.color}>{planInfo.label}</Badge>
               </InlineStack>
 
-              <Text as="p" tone="subdued" variant="bodySm" alignment="center">
+              <Text as="span" tone="subdued" variant="bodySm" alignment="center">
                 {featureLabel
                   ? `${featureLabel} requires the ${planInfo.label} plan or higher.`
                   : `This feature is available on the ${planInfo.label} plan.`}

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import ConditionalLogicEditor from "./ConditionalLogicEditor";
 import TargetedActionsEditor from "./TargetedActionsEditor";
 import ColorPickerInput from "./ColorPickerInput";
@@ -63,6 +63,22 @@ function ClientRichTextEditor({ value, onChange }) {
  */
 export default function ElementEditor({ element, allElements = [], onChange, onBack, onDelete, hasConditionalLogic = true, currentTier = "basic" }) {
   const [selectedTab, setSelectedTab] = useState(0);
+  const [bulkUploading, setBulkUploading] = useState(false);
+  const bulkFileInputRef = useRef(null);
+
+  const dragItem = useRef(null);
+  const dragOverItem = useRef(null);
+
+  const handleSortChoices = () => {
+    if (dragItem.current === null || dragOverItem.current === null) return;
+    if (dragItem.current === dragOverItem.current) return;
+    const newChoices = [...(element.config?.choices || [])];
+    const draggedItemContent = newChoices.splice(dragItem.current, 1)[0];
+    newChoices.splice(dragOverItem.current, 0, draggedItemContent);
+    handleConfigChange("choices", newChoices);
+    dragItem.current = null;
+    dragOverItem.current = null;
+  };
 
   const typeStr = element.type || "";
   const isInput = ["Text", "Textarea", "Email", "Phone"].includes(typeStr);
@@ -271,24 +287,35 @@ export default function ElementEditor({ element, allElements = [], onChange, onB
                         ) !== index;
                         
                         return (
-                          <InlineStack gap="200" blockAlign="start" key={choice.id || index}>
-                            <Box paddingBlockStart="100">
-                              <Button variant="tertiary" size="slim" disabled>⋮⋮</Button>
-                            </Box>
-                            <Box width="200px">
-                              <TextField
-                                value={choice.label}
-                                onChange={(val) => {
-                                  const newChoices = [...(element.config.choices || [])];
-                                  newChoices[index] = { ...choice, label: val };
-                                  handleConfigChange("choices", newChoices);
-                                }}
-                                placeholder="Option label"
-                                autoComplete="off"
-                                labelHidden
-                                error={isDuplicate ? "Duplicate option" : false}
-                              />
-                            </Box>
+                          <span
+                            key={choice.id || index}
+                            draggable
+                            onDragStart={() => { dragItem.current = index; }}
+                            onDragEnter={() => { dragOverItem.current = index; }}
+                            onDragEnd={handleSortChoices}
+                            onDragOver={(e) => e.preventDefault()}
+                            style={{ display: "block", padding: "4px", margin: "-4px", borderRadius: "4px" }}
+                          >
+                            <InlineStack gap="200" blockAlign="start">
+                              <Box paddingBlockStart="100">
+                                <Button variant="tertiary" size="slim">
+                                  <span style={{ cursor: "grab", opacity: 0.5 }}>⋮⋮</span>
+                                </Button>
+                              </Box>
+                              <Box width="200px">
+                                <TextField
+                                  value={choice.label}
+                                  onChange={(val) => {
+                                    const newChoices = [...(element.config.choices || [])];
+                                    newChoices[index] = { ...choice, label: val };
+                                    handleConfigChange("choices", newChoices);
+                                  }}
+                                  placeholder="Option label"
+                                  autoComplete="off"
+                                  labelHidden
+                                  error={isDuplicate ? "Duplicate option" : false}
+                                />
+                              </Box>
                             <Box width="200px">
                               <TextField
                                 value={choice.value || ""}
@@ -365,24 +392,82 @@ export default function ElementEditor({ element, allElements = [], onChange, onB
                             🗑️
                           </Button>
                         </InlineStack>
+                      </span>
                       );
                     })}
                       <Box paddingBlockStart="200">
-                        <Button
-                          variant="tertiary"
-                          onClick={() => {
-                            const newChoices = [...(element.config?.choices || [])];
-                            newChoices.push({
-                              id: `opt-${Date.now()}`,
-                              label: `Option ${newChoices.length + 1}`,
-                              price: "",
-                              default: false,
-                            });
-                            handleConfigChange("choices", newChoices);
-                          }}
-                        >
-                          + Add option
-                        </Button>
+                        <InlineStack gap="200" wrap={false}>
+                          <Button
+                            variant="tertiary"
+                            onClick={() => {
+                              const newChoices = [...(element.config?.choices || [])];
+                              newChoices.push({
+                                id: `opt-${Date.now()}`,
+                                label: `Option ${newChoices.length + 1}`,
+                                price: "",
+                                default: false,
+                              });
+                              handleConfigChange("choices", newChoices);
+                            }}
+                          >
+                            + Add option
+                          </Button>
+
+                          {/* Parallel bulk image upload — only for image types */}
+                          {["Image Swatch", "Image Dropdown"].includes(element.type) && (
+                            <>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                multiple
+                                style={{ display: "none" }}
+                                ref={bulkFileInputRef}
+                                onChange={async (e) => {
+                                  const picked = Array.from(e.target.files || []);
+                                  e.target.value = null;
+                                  if (!picked.length) return;
+
+                                  setBulkUploading(true);
+                                  try {
+                                    const formData = new FormData();
+                                    picked.forEach((f) => formData.append("file", f));
+
+                                    const res  = await fetch("/api/upload", { method: "POST", body: formData });
+                                    const json = await res.json();
+
+                                    if (json.ok) {
+                                      const cdnUrls = json.urls || (json.url ? [json.url] : []);
+                                      const newChoices = [...(element.config?.choices || [])];
+                                      cdnUrls.forEach((url, i) => {
+                                        newChoices.push({
+                                          id:      `opt-${Date.now()}-${i}`,
+                                          label:   picked[i]?.name?.replace(/\.[^.]+$/, "") || `Option ${newChoices.length + 1}`,
+                                          price:   "",
+                                          default: false,
+                                          image:   url,
+                                        });
+                                      });
+                                      handleConfigChange("choices", newChoices);
+                                    } else {
+                                      alert("Bulk upload failed: " + (json.error || "Unknown error"));
+                                    }
+                                  } catch (err) {
+                                    alert("Bulk upload error: " + err.message);
+                                  } finally {
+                                    setBulkUploading(false);
+                                  }
+                                }}
+                              />
+                              <Button
+                                variant="tertiary"
+                                loading={bulkUploading}
+                                onClick={() => bulkFileInputRef.current?.click()}
+                              >
+                                🖼️ Bulk Upload Images
+                              </Button>
+                            </>
+                          )}
+                        </InlineStack>
                       </Box>
                     </BlockStack>
                   </BlockStack>
@@ -406,14 +491,14 @@ export default function ElementEditor({ element, allElements = [], onChange, onB
                     <Text variant="headingSm" as="h3">Divider Settings</Text>
                     <InlineGrid columns={2} gap="400">
                       <Box>
-                        <Text as="p" paddingBlockEnd="100">Color</Text>
+                        <Text as="span" paddingBlockEnd="100">Color</Text>
                         <ColorPickerInput 
                           value={element.config?.color || "#bbbbbb"} 
                           onChange={(val) => handleConfigChange("color", val)}
                         />
                       </Box>
                       <Box>
-                        <Text as="p" paddingBlockEnd="100">Style</Text>
+                        <Text as="span" paddingBlockEnd="100">Style</Text>
                         <ButtonGroup variant="segmented" fullWidth>
                           <Button pressed={element.config?.style === "solid" || !element.config?.style} onClick={() => handleConfigChange("style", "solid")}>Solid</Button>
                           <Button pressed={element.config?.style === "double"} onClick={() => handleConfigChange("style", "double")}>Double</Button>
@@ -487,7 +572,7 @@ export default function ElementEditor({ element, allElements = [], onChange, onB
                     />
                     <Box>
                       <InlineStack align="start" blockAlign="center" gap="200" paddingBlockEnd="100">
-                        <Text as="p" variant="bodyMd">Modal content</Text>
+                        <Text as="span" variant="bodyMd">Modal content</Text>
                         <div style={{ background: '#f4f6f8', padding: '2px 8px', borderRadius: '12px', fontSize: '12px', fontWeight: 'bold', color: '#5c6ac4' }}>en</div>
                       </InlineStack>
                       <ClientRichTextEditor 
@@ -614,7 +699,7 @@ export default function ElementEditor({ element, allElements = [], onChange, onB
                   <BlockStack gap="400">
                     <Text variant="headingSm" as="h3">Color Picker Settings</Text>
                     <Box width="100px">
-                      <Text as="p" paddingBlockEnd="100">Default color</Text>
+                      <Text as="span" paddingBlockEnd="100">Default color</Text>
                       <ColorPickerInput 
                         value={element.config?.defaultColor || "#000000"} 
                         onChange={(val) => handleConfigChange("defaultColor", val)}
@@ -682,7 +767,7 @@ export default function ElementEditor({ element, allElements = [], onChange, onB
                 <Box paddingBlockStart="400" paddingBlockEnd="400">
                   <BlockStack gap="400">
                     <Text variant="headingSm" as="h3">Bundle Products</Text>
-                    <Text as="p" tone="subdued" variant="bodySm">
+                    <Text as="span" tone="subdued" variant="bodySm">
                       Select products from your store. Customers will be able to choose variants for each bundled product.
                     </Text>
                     <InlineStack>
@@ -731,8 +816,8 @@ export default function ElementEditor({ element, allElements = [], onChange, onB
                                   <div style={{ width: "40px", height: "40px", borderRadius: "6px", background: "var(--p-color-bg-surface-tertiary)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px" }}>📦</div>
                                 )}
                                 <BlockStack gap="0">
-                                  <Text variant="bodyMd" fontWeight="bold" as="p">{product.title}</Text>
-                                  <Text variant="bodySm" tone="subdued" as="p">
+                                  <Text variant="bodyMd" fontWeight="bold" as="span">{product.title}</Text>
+                                  <Text variant="bodySm" tone="subdued" as="span">
                                     {(product.variants || []).length} variant{(product.variants || []).length !== 1 ? "s" : ""}
                                   </Text>
                                 </BlockStack>
@@ -936,7 +1021,7 @@ export default function ElementEditor({ element, allElements = [], onChange, onB
               {["Radio Button", "Checkbox", "Button", "Color Swatch", "Image Swatch"].includes(typeStr) && (
                 <BlockStack gap="400">
                   <Box>
-                    <Text as="p" paddingBlockEnd="200">Scroll type</Text>
+                    <Text as="span" paddingBlockEnd="200">Scroll type</Text>
                     <ButtonGroup variant="segmented" fullWidth>
                       <Button
                         pressed={element.config?.scrollType === "Default" || !element.config?.scrollType}

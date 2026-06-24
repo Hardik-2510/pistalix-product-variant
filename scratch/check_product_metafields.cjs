@@ -3,7 +3,7 @@ const prisma = new PrismaClient();
 
 async function main() {
   const session = await prisma.session.findFirst({
-    where: { shop: 'follow-docs.myshopify.com' }
+    where: { shop: 'varify-pov.myshopify.com' }
   });
 
   if (!session) {
@@ -15,7 +15,7 @@ async function main() {
   const productGid = "gid://shopify/Product/8785993629867";
 
   console.log(`Querying metafields for product: ${productGid}`);
-  
+
   const query = `
     query GetProductMetafields($id: ID!) {
       product(id: $id) {

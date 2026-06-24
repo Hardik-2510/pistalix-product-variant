@@ -4,7 +4,7 @@ const prisma = new PrismaClient();
 
 async function run() {
   try {
-    const session = { shop: 'follow-docs.myshopify.com' };
+    const session = { shop: 'varify-pov.myshopify.com' };
     const tpl = {
       name: "Mock Template",
       sections: [

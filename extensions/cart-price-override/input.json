@@ -1,0 +1,19 @@
+{
+  "cart": {
+    "lines": [
+      {
+        "id": "gid://shopify/CartLine/123456789",
+        "quantity": 1,
+        "finalPrice": {
+          "value": "35.00"
+        },
+        "cost": {
+          "amountPerQuantity": {
+            "amount": "20.00",
+            "currencyCode": "USD"
+          }
+        }
+      }
+    ]
+  }
+}

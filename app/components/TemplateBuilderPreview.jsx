@@ -142,7 +142,7 @@ export default function TemplateBuilderPreview({ elements = [], sections = [] })
       ) : (
         <Box paddingBlockStart="400">
           <BlockStack gap="200" inlineAlign="center">
-            <Text as="p" tone="subdued" alignment="center">
+            <Text as="span" tone="subdued" alignment="center">
               Add options to see a live preview
             </Text>
           </BlockStack>

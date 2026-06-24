@@ -199,6 +199,7 @@
   transition: all 0.2s;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
 }
 
 .cap-options-wrapper .cap-button-swatch:hover {

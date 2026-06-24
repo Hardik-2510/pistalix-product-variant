@@ -15,7 +15,7 @@ import {
 } from "@shopify/polaris";
 import { PlusIcon, ViewIcon } from "@shopify/polaris-icons";
 import "@shopify/polaris/build/esm/styles.css";
-import { useNavigate, useLoaderData, useFetcher } from "react-router";
+import { useNavigate, useLoaderData, useFetcher, useRouteError, isRouteErrorResponse } from "react-router";
 import prisma from "../db.server";
 import { authenticate } from "../shopify.server";
 import { validateOptionSetLimit } from "../lib/features.server";
@@ -313,6 +313,31 @@ export const action = async ({ request }) => {
 
   return new Response(JSON.stringify({ error: "Invalid action" }), { status: 400, headers: { "Content-Type": "application/json" } });
 };
+
+export function ErrorBoundary() {
+  const error = useRouteError();
+  console.error("Templates Index Error:", error);
+
+  let title = "Error loading templates";
+  let message = "An unexpected error occurred. Please try again.";
+
+  if (isRouteErrorResponse(error)) {
+    message = error.data || `Error ${error.status}`;
+  } else if (error instanceof Error) {
+    message = error.message;
+  }
+
+  return (
+    <Page>
+      <Card>
+        <BlockStack gap="400">
+          <Text variant="headingMd" as="h2">{title}</Text>
+          <Text as="p" tone="critical">{message}</Text>
+        </BlockStack>
+      </Card>
+    </Page>
+  );
+}
 
 export default function OptionTemplates() {
   const { optionSets, limitCheck, shopDomain, predefinedTemplates, personalizedTemplates, isDev } = useLoaderData();

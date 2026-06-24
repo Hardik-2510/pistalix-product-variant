@@ -3,7 +3,7 @@ const prisma = new PrismaClient();
 
 async function main() {
   const session = await prisma.session.findFirst({
-    where: { shop: 'follow-docs.myshopify.com' }
+    where: { shop: 'varify-pov.myshopify.com' }
   });
 
   if (!session) {

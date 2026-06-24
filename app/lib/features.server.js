@@ -9,10 +9,10 @@ export async function getShopTier(shopDomain) {
   // Developer Override: automatically unlock all premium features for internal dev stores
   const DEVELOPER_STORES = [
     "varify-pov.myshopify.com",
-    "follow-docs.myshopify.com"
+    "varify-pov.myshopify.com"
   ];
   if (
-    DEVELOPER_STORES.includes(shopDomain) || 
+    DEVELOPER_STORES.includes(shopDomain) ||
     process.env.FORCE_PREMIUM === "true" ||
     process.env.NODE_ENV === "development"
   ) {

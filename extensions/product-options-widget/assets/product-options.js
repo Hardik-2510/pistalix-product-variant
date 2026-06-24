@@ -395,28 +395,8 @@ function formatMoney(cents, format) {
   return formatString.replace(placeholderRegex, value);
 }
 
-function getOptionLabel(opt, isInput) {
-  var p = parseFloat(opt.price);
-  if (!isNaN(p) && p > 0) {
-    var toggleStates = getToggleStates();
-    // Check the appropriate toggle
-    if (isInput && toggleStates.showAddonForInputs === false) return opt.label;
-    if (!isInput && toggleStates.showAddonForOptions === false) return opt.label;
-
-    var cents = p * 100; // usually admin price is in dollars
-    var settings = capConfig.settings || {};
-    var addonMoneyFormat = settings.addonMoneyFormat || "With currency";
-    var addonLabelFormat = settings.addonLabelFormat || "(+ {{addon}})";
-
-    var formattedMoney = formatMoney(cents, capConfig.moneyFormat);
-    if (addonMoneyFormat === "Without currency") {
-      // Just extract the number with decimals/commas
-      formattedMoney = formatMoney(cents, '{{amount}}');
-    }
-
-    var addonString = addonLabelFormat.replace('{{addon}}', formattedMoney);
-    return opt.label + ' ' + addonString;
-  }
+function getOptionLabel(opt) {
+  // Always return the plain label — addon prices are handled by the cart transform.
   return opt.label;
 }
 
@@ -568,6 +548,7 @@ function updateTotalPrice() {
 
       // Priority #1: Predefined Registry
       var predefinedSelectors = [
+        '.price__container .price-item',
         '.price-item--sale',
         '.price__sale .price-item--sale',
         '.price-item--regular',
@@ -582,8 +563,6 @@ function updateTotalPrice() {
 
       predefinedSelectors.forEach(function (sel) {
         document.querySelectorAll(sel).forEach(function (el) {
-          // Don't update the strikethrough compare-at price when on sale
-          if (el.closest('.price--on-sale') && !el.closest('.price__sale')) return;
           elements.push(el);
         });
       });
@@ -712,6 +691,25 @@ function updateDisplayValue(group) {
 
   if (val) {
     displaySpan.textContent = ' ' + val;
+
+    if (group._element && group._element.config && group._element.config.choices) {
+      var matchingChoice = group._element.config.choices.find(function(c) { return c.label === val; });
+      if (matchingChoice) {
+        var p = parseFloat(matchingChoice.price);
+        if (!isNaN(p) && p > 0) {
+          var cents = p * 100;
+          var settings = capConfig.settings || {};
+          var addonMoneyFormat = settings.addonMoneyFormat || "With currency";
+          var addonLabelFormat = settings.addonLabelFormat || "(+ {{addon}})";
+          var formattedMoney = formatMoney(cents, capConfig.moneyFormat);
+          if (addonMoneyFormat === "Without currency") {
+            formattedMoney = formatMoney(cents, '{{amount}}');
+          }
+          var addonString = addonLabelFormat.replace('{{addon}}', formattedMoney);
+          displaySpan.textContent += ' ' + addonString;
+        }
+      }
+    }
   } else {
     displaySpan.textContent = '';
   }
@@ -750,31 +748,6 @@ function createGroup(element) {
   }
 
   labelWrap.appendChild(labelEl);
-
-  // Show addon price label next to input element labels
-  var inputTypes = ['Text', 'Textarea', 'Number', 'Email', 'Phone', 'File', 'Datetime'];
-  var elConfig = typeof element.config === 'string' ? JSON.parse(element.config) : (element.config || {});
-  if (inputTypes.indexOf(element.type) !== -1 && toggleStates.showAddonForInputs !== false) {
-    var elPrice = parseFloat(elConfig.price);
-    if (!isNaN(elPrice) && elPrice > 0) {
-      var settings = capConfig.settings || {};
-      var addonMoneyFmt = settings.addonMoneyFormat || "With currency";
-      var addonLabelFmt = settings.addonLabelFormat || "(+ {{addon}})";
-      var cents = elPrice * 100;
-      var fmtMoney = formatMoney(cents, capConfig.moneyFormat);
-      if (addonMoneyFmt === "Without currency") {
-        fmtMoney = formatMoney(cents, '{{amount}}');
-      }
-      var addonStr = addonLabelFmt.replace('{{addon}}', fmtMoney);
-      var priceSpan = document.createElement('span');
-      priceSpan.className = 'cap-addon-price-label';
-      priceSpan.style.fontWeight = 'normal';
-      priceSpan.style.color = 'var(--p-color-text-subdued, #666)';
-      priceSpan.style.marginLeft = '4px';
-      priceSpan.textContent = addonStr;
-      labelEl.appendChild(priceSpan);
-    }
-  }
 
   if (element.required) {
     var req = document.createElement('span');

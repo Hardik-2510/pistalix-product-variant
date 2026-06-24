@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import {
   Page,
   Card,
@@ -360,7 +360,7 @@ export default function OptionSetBuilder({ initialData = null, currentTier = "fr
   }, [name, status, sections, elements, productRules, fetcher, navigate]);
 
   // ─── Tab Definitions ────────────────────────────────────────────────
-  const tabs = [
+  const tabs = useMemo(() => [
     {
       id: "elements",
       content: (
@@ -371,7 +371,7 @@ export default function OptionSetBuilder({ initialData = null, currentTier = "fr
       ),
     },
     { id: "product-rules", content: "Product rules" },
-  ];
+  ], [elements.length]);
 
   // ─── Discard Handler ────────────────────────────────────────────────
   const handleDiscard = useCallback(() => {

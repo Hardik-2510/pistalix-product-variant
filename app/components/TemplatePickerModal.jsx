@@ -84,7 +84,7 @@ export default function TemplatePickerModal({ open, onClose, onSelect }) {
                 <Card key={tpl.id} padding="400">
                   <BlockStack gap="300">
                     <Text variant="headingMd" as="h3">{tpl.title}</Text>
-                    <Text tone="subdued" as="p">{tpl.description}</Text>
+                    <Text tone="subdued" as="span">{tpl.description}</Text>
                     <Text variant="bodySm" tone="subdued">{tpl.elements.length} elements</Text>
                     
                     <InlineStack align="end">

@@ -3,11 +3,11 @@ const prisma = new PrismaClient();
 
 async function main() {
   const session = await prisma.session.findFirst({
-    where: { shop: 'follow-docs.myshopify.com' }
+    where: { shop: 'varify-pov.myshopify.com' }
   });
 
   if (!session) {
-    console.error("No session found for follow-docs.myshopify.com");
+    console.error("No session found for varify-pov.myshopify.com");
     return;
   }
 

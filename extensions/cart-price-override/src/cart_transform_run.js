@@ -17,59 +17,32 @@ const zeroDecimalCurrencies = new Set([
   'PYG', 'RWF', 'UGX', 'VND', 'VUV', 'XAF', 'XOF', 'XPF'
 ]);
 
-/**
- * Parses raw storefront pricing attribute to float value.
- * Supports: decimal strings ("851.00"), raw cents ("85100"), currency codes, and base amount comparisons.
- *
- * @param {string} value
- * @param {string} currencyCode
- * @param {number} baseAmount
- * @returns {number | null}
- */
-function parsePrice(value, currencyCode, baseAmount) {
-  const floatVal = parseFloat(value);
-  if (isNaN(floatVal)) return null;
-
-  const isZeroDecimal = zeroDecimalCurrencies.has(currencyCode);
-  if (isZeroDecimal) {
-    return floatVal;
-  }
-
-  // If value explicitly includes decimal point, it is already a dollar float
-  if (value.indexOf('.') !== -1) {
-    return floatVal;
-  }
-
-  // If we have a valid non-zero baseAmount, compare scale
-  if (baseAmount > 0) {
-    if (floatVal > 10 * baseAmount) {
-      return floatVal / 100;
-    } else {
-      return floatVal;
-    }
-  }
-
-  // Fallback if baseAmount is 0 (e.g. free product)
-  if (floatVal >= 100) {
-    return floatVal / 100;
-  }
-
-  return floatVal;
-}
 
 /**
  * @param {RunInput} input
  * @returns {FunctionRunResult}
  */
 export function cartTransformRun(input) {
+  // console.error("Pistalix Backend Trace [4] - Incoming Cart Transform Input:", JSON.stringify(input.cart.lines));
+  
   const operations = [];
 
   for (const line of input.cart.lines) {
     let customPrice = null;
 
     // Access the aliased `finalPrice` property defined in your run.graphql
+    // The storefront JS always sends this as a dollar float string e.g. "35.00"
     if (line.finalPrice && line.finalPrice.value) {
-      customPrice = parsePrice(line.finalPrice.value, 'USD', 0);
+      const rawValue = line.finalPrice.value.trim();
+      const floatVal = parseFloat(rawValue);
+
+      if (!isNaN(floatVal) && floatVal > 0) {
+        // The storefront JS (product-options.js line 522) always formats as:
+        //   (finalPriceCents / 100).toFixed(2)  →  e.g. "35.00"
+        // So it is always a dollar amount. No cents conversion needed.
+        customPrice = floatVal;
+        // console.error("Pistalix Backend Trace [5] - Detected customPrice for line", line.id, ":", customPrice);
+      }
     }
 
     // If no custom price in properties, skip
@@ -79,6 +52,8 @@ export function cartTransformRun(input) {
     const isZeroDecimal = zeroDecimalCurrencies.has(currencyCode);
 
     const amountStr = String(customPrice.toFixed(isZeroDecimal ? 0 : 2));
+
+    // console.error("Pistalix Backend Trace [5b] - Setting price to:", amountStr, "for line", line.id);
 
     operations.push({
       lineUpdate: {
@@ -94,5 +69,6 @@ export function cartTransformRun(input) {
     });
   }
 
+  // console.error("Pistalix Backend Trace [6] - Outgoing Operations:", JSON.stringify(operations));
   return operations.length > 0 ? { operations } : NO_CHANGES;
 }

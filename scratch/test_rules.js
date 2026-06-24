@@ -3,7 +3,7 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 async function run() {
-  const shop = 'follow-docs.myshopify.com';
+  const shop = 'varify-pov.myshopify.com';
   const productId = '8785993892011';
   const productGid = `gid://shopify/Product/${productId}`;
 
@@ -40,8 +40,8 @@ async function run() {
             matchedOptionSet = os;
             break;
           } else if (typeof rule.targetValues === 'string' && rule.targetValues === productGid) {
-             matchedOptionSet = os;
-             break;
+            matchedOptionSet = os;
+            break;
           }
         } catch (e) {
           if (rule.targetValues === productGid) {

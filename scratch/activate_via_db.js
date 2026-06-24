@@ -5,7 +5,7 @@ const prisma = new PrismaClient();
 async function run() {
   console.log("Fetching session from DB...");
   const session = await prisma.session.findFirst({
-    where: { shop: 'follow-docs.myshopify.com' }
+    where: { shop: 'varify-pov.myshopify.com' }
   });
 
   if (!session) {
@@ -14,7 +14,7 @@ async function run() {
   }
 
   console.log("Found session. Querying shopifyFunctions...");
-  
+
   const shopifyReq = async (query, variables = {}) => {
     const res = await fetch(`https://${session.shop}/admin/api/2024-01/graphql.json`, {
       method: 'POST',
