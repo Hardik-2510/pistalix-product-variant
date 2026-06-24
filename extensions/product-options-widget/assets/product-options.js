@@ -546,34 +546,36 @@ function updateTotalPrice() {
     var findPriceElements = function () {
       var elements = [];
 
-      // Priority #1: Predefined Registry
-      var predefinedSelectors = [
-        '.price__container .price-item',
-        '.price-item--sale',
-        '.price__sale .price-item--sale',
-        '.price-item--regular',
-        '.price__regular .price-item--regular',
-        '.product-single__price',
-        '.product__price',
-        '.price .price-item',
-        '.current-price',
-        '[data-product-price]',
-        '.product-price'
-      ];
-
-      predefinedSelectors.forEach(function (sel) {
-        document.querySelectorAll(sel).forEach(function (el) {
-          elements.push(el);
-        });
-      });
-
-      // Priority #2: Merchant Override
-      if (elements.length === 0 && capConfig.settings && capConfig.settings.customPriceSelector) {
+      // Priority #1: Merchant Override
+      if (capConfig.settings && capConfig.settings.customPriceSelector) {
         try {
           document.querySelectorAll(capConfig.settings.customPriceSelector).forEach(function (el) {
             elements.push(el);
           });
         } catch (e) { /* ignore invalid selector errors */ }
+      }
+
+      // Priority #2: Predefined Registry
+      if (elements.length === 0) {
+        var predefinedSelectors = [
+          '.price__container .price-item',
+          '.price-item--sale',
+          '.price__sale .price-item--sale',
+          '.price-item--regular',
+          '.price__regular .price-item--regular',
+          '.product-single__price',
+          '.product__price',
+          '.price .price-item',
+          '.current-price',
+          '[data-product-price]',
+          '.product-price'
+        ];
+
+        predefinedSelectors.forEach(function (sel) {
+          document.querySelectorAll(sel).forEach(function (el) {
+            elements.push(el);
+          });
+        });
       }
 
       // Priority #3: Safety Net
