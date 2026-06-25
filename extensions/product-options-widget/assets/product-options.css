@@ -114,6 +114,14 @@
 }
 
 /* ─── Radio & Checkbox ─────────────────────────────────────────── */
+.cap-options-wrapper input[type="radio"]::before,
+.cap-options-wrapper input[type="radio"]::after,
+.cap-options-wrapper input[type="checkbox"]::before,
+.cap-options-wrapper input[type="checkbox"]::after {
+  content: none !important;
+  display: none !important;
+}
+
 .cap-options-wrapper .cap-radio-group,
 .cap-options-wrapper .cap-checkbox-group {
   display: flex;

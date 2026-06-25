@@ -482,7 +482,7 @@ export default function ElementRenderer({ element, value, onChange }) {
           <Box paddingBlockEnd="100">{renderLabelContent()}</Box>
           <Box>
             <div style={getScrollStyle()}>
-              <BlockStack gap="100">
+              <div style={{ display: 'flex', flexDirection: config.directionStyle === 'horizontal' ? 'row' : 'column', flexWrap: config.directionStyle === 'horizontal' && config.scrollType && config.scrollType !== "Default" ? 'nowrap' : 'wrap', gap: config.directionStyle === 'horizontal' ? '16px' : '8px' }}>
                 {optionsList.map((o, i) => {
                   const optValue = o.id || o.value || o.label || String(i);
                   return (
@@ -494,7 +494,7 @@ export default function ElementRenderer({ element, value, onChange }) {
                     />
                   );
                 })}
-              </BlockStack>
+              </div>
             </div>
           </Box>
           {renderHelpText()}
@@ -528,7 +528,7 @@ export default function ElementRenderer({ element, value, onChange }) {
               </BlockStack>
             ) : (
               <div style={getScrollStyle()}>
-                <BlockStack gap="100">
+                <div style={{ display: 'flex', flexDirection: config.directionStyle === 'horizontal' ? 'row' : 'column', flexWrap: config.directionStyle === 'horizontal' && config.scrollType && config.scrollType !== "Default" ? 'nowrap' : 'wrap', gap: config.directionStyle === 'horizontal' ? '16px' : '8px' }}>
                   {optionsList.map((o, i) => {
                     const optValue = o.id || o.value || o.label || String(i);
                     return (
@@ -543,7 +543,7 @@ export default function ElementRenderer({ element, value, onChange }) {
                       />
                     );
                   })}
-                </BlockStack>
+                </div>
               </div>
             )}
           </Box>

@@ -534,6 +534,9 @@ function updateTotalPrice() {
         wrapper.appendChild(existingTotalLine);
       }
       var formattedAddonMoney = formatMoney(totalAddonCents, capConfig.moneyFormat);
+      if (formattedAddonMoney.endsWith('.00')) {
+        formattedAddonMoney = formattedAddonMoney.slice(0, -3);
+      }
       existingTotalLine.innerHTML = '<div style="display:block !important; white-space:nowrap !important; width:100% !important;">Selections will add <span style="display:inline !important;font-weight:600;">' + formattedAddonMoney + '</span> to the price</div>';
     } else if (existingTotalLine) {
       existingTotalLine.remove();
@@ -707,7 +710,13 @@ function updateDisplayValue(group) {
           if (addonMoneyFormat === "Without currency") {
             formattedMoney = formatMoney(cents, '{{amount}}');
           }
+          if (formattedMoney.endsWith('.00')) {
+            formattedMoney = formattedMoney.slice(0, -3);
+          }
+          // Also remove any space after the plus if it was meant to look like (+30$)
           var addonString = addonLabelFormat.replace('{{addon}}', formattedMoney);
+          addonString = addonString.replace(/\(\+\s+/, '(+');
+          
           displaySpan.textContent += ' ' + addonString;
         }
       }
@@ -767,7 +776,7 @@ function createGroup(element) {
     labelWrap.style.display = 'none';
   }
 
-  var helpText = element.subtext || config.helpText;
+  var helpText = config.helpText;
 
   if (helpText) {
     if (config.helpTextPosition === "Tooltip") {
@@ -2604,6 +2613,17 @@ function renderRadio(element) {
 
   var wrap = document.createElement('div');
   wrap.className = 'cap-radio-group';
+  var isHorizontal = config.directionStyle === 'horizontal';
+  var hasHorizontalScroll = isHorizontal && config.scrollType && config.scrollType !== 'Default';
+  if (isHorizontal) {
+    wrap.style.setProperty('flex-direction', 'row', 'important');
+    wrap.style.setProperty('flex-wrap', hasHorizontalScroll ? 'nowrap' : 'wrap', 'important');
+    wrap.style.setProperty('gap', '16px', 'important');
+  } else {
+    wrap.style.setProperty('flex-direction', 'column', 'important');
+    wrap.style.setProperty('flex-wrap', 'nowrap', 'important');
+    wrap.style.setProperty('gap', '8px', 'important');
+  }
   applyScrollStyle(wrap, config, 'radio button');
 
   choices.forEach(function (opt) {
@@ -2651,6 +2671,17 @@ function renderCheckbox(element) {
 
   var wrap = document.createElement('div');
   wrap.className = 'cap-checkbox-group';
+  var isHorizontal = config.directionStyle === 'horizontal';
+  var hasHorizontalScroll = isHorizontal && config.scrollType && config.scrollType !== 'Default';
+  if (isHorizontal) {
+    wrap.style.setProperty('flex-direction', 'row', 'important');
+    wrap.style.setProperty('flex-wrap', hasHorizontalScroll ? 'nowrap' : 'wrap', 'important');
+    wrap.style.setProperty('gap', '16px', 'important');
+  } else {
+    wrap.style.setProperty('flex-direction', 'column', 'important');
+    wrap.style.setProperty('flex-wrap', 'nowrap', 'important');
+    wrap.style.setProperty('gap', '8px', 'important');
+  }
   applyScrollStyle(wrap, config, 'checkbox');
 
   var defaultValues = [];
@@ -2730,12 +2761,12 @@ function renderButtonSwatch(element) {
     btn.textContent = getOptionLabel(opt);
     btn.setAttribute('data-price', getOptionPriceCents(opt));
 
-    if (config.swatchWidth) btn.style.width = config.swatchWidth + 'px';
-    if (config.swatchHeight) btn.style.height = config.swatchHeight + 'px';
-    if (config.swatchWidth) btn.style.padding = '0';
+    btn.style.setProperty('width', config.swatchWidth ? config.swatchWidth + 'px' : 'auto', 'important');
+    btn.style.setProperty('height', config.swatchHeight ? config.swatchHeight + 'px' : '36px', 'important');
+    btn.style.setProperty('padding', config.swatchWidth ? '0' : '0 16px', 'important');
 
     var borderRadius = config.swatchShape === 'Round' ? '50px' : '4px';
-    btn.style.borderRadius = borderRadius;
+    btn.style.setProperty('border-radius', borderRadius, 'important');
 
     if (isDefault(opt, config)) {
       btn.classList.add('cap-selected');

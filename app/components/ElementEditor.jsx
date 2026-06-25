@@ -1074,7 +1074,7 @@ export default function ElementEditor({ element, allElements = [], onChange, onB
               )}
 
               {/* Layout and Dimensions for Swatches & Buttons */}
-              {(isSwatchType || typeStr === "Button") && (
+              {(isSwatchType || typeStr === "Button" || typeStr === "Radio Button" || typeStr === "Checkbox") && (
                 <BlockStack gap="400">
                   <Box>
                     <Text as="p" paddingBlockEnd="200">Direction style</Text>
