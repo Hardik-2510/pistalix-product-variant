@@ -48,6 +48,72 @@ const PLAN_STYLES = {
   },
 };
 
+// Paper plane icon — Free plan (proper folded paper plane, flying right)
+const PaperPlaneIcon = () => (
+  <svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg" style={{ width: '72px', height: '72px' }}>
+    {/* Main body: big triangle pointing right */}
+    <polygon points="8,16 72,40 8,64" fill="#e2e8f0" stroke="#94a3b8" strokeWidth="2" strokeLinejoin="round"/>
+    {/* Bottom fold crease */}
+    <polygon points="8,64 30,45 46,52" fill="#cbd5e1" stroke="#94a3b8" strokeWidth="1.5" strokeLinejoin="round"/>
+    {/* Top fold crease line */}
+    <line x1="8" y1="16" x2="30" y2="45" stroke="#94a3b8" strokeWidth="1.5"/>
+    {/* Fold highlight line from nose to tail */}
+    <line x1="30" y1="45" x2="72" y2="40" stroke="#64748b" strokeWidth="1.5"/>
+  </svg>
+);
+
+// Airplane icon — Standard plan (realistic top-down commercial jet)
+const AirplaneIcon = () => (
+  <svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg" style={{ width: '72px', height: '72px' }}>
+    {/* Fuselage */}
+    <ellipse cx="40" cy="40" rx="7" ry="28" fill="#e0e7ff" stroke="#6366f1" strokeWidth="2"/>
+    {/* Nose cone */}
+    <ellipse cx="40" cy="14" rx="5" ry="7" fill="#c7d2fe" stroke="#6366f1" strokeWidth="2"/>
+    {/* Main wings */}
+    <path d="M40,32 L10,52 L18,56 L40,44 L62,56 L70,52 Z" fill="#a5b4fc" stroke="#6366f1" strokeWidth="1.5" strokeLinejoin="round"/>
+    {/* Red stripe on wings */}
+    <path d="M40,36 L14,53 L18,55 L40,41 L62,55 L66,53 Z" fill="#f87171" opacity="0.5"/>
+    {/* Tail fin */}
+    <path d="M40,62 L28,72 L40,68 L52,72 Z" fill="#a5b4fc" stroke="#6366f1" strokeWidth="1.5" strokeLinejoin="round"/>
+    {/* Windows */}
+    <circle cx="40" cy="28" r="3" fill="white" stroke="#6366f1" strokeWidth="1.2"/>
+    <circle cx="40" cy="36" r="3" fill="white" stroke="#6366f1" strokeWidth="1.2"/>
+    {/* Engines under wings */}
+    <ellipse cx="24" cy="46" rx="5" ry="3" fill="#6366f1" opacity="0.7"/>
+    <ellipse cx="56" cy="46" rx="5" ry="3" fill="#6366f1" opacity="0.7"/>
+  </svg>
+);
+
+// Rocket icon — Premium plan (space shuttle style, facing up with flames)
+const RocketIcon = () => (
+  <svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg" style={{ width: '72px', height: '72px' }}>
+    {/* Body */}
+    <rect x="30" y="22" width="20" height="32" rx="4" fill="#fee2e2" stroke="#ef4444" strokeWidth="2"/>
+    {/* Nose cone */}
+    <path d="M30,22 Q40,4 50,22 Z" fill="#fca5a5" stroke="#ef4444" strokeWidth="2" strokeLinejoin="round"/>
+    {/* Porthole */}
+    <circle cx="40" cy="32" r="6" fill="white" stroke="#ef4444" strokeWidth="2"/>
+    <circle cx="40" cy="32" r="3.5" fill="#fca5a5"/>
+    {/* Left fin */}
+    <path d="M30,46 L18,60 L30,54 Z" fill="#fbbf24" stroke="#d97706" strokeWidth="1.5" strokeLinejoin="round"/>
+    {/* Right fin */}
+    <path d="M50,46 L62,60 L50,54 Z" fill="#fbbf24" stroke="#d97706" strokeWidth="1.5" strokeLinejoin="round"/>
+    {/* Nozzle base */}
+    <rect x="34" y="54" width="12" height="6" rx="2" fill="#f87171" stroke="#ef4444" strokeWidth="1.5"/>
+    {/* Flames */}
+    <ellipse cx="40" cy="64" rx="7" ry="5" fill="#fbbf24"/>
+    <ellipse cx="37" cy="67" rx="4" ry="5" fill="#f97316" opacity="0.9"/>
+    <ellipse cx="43" cy="68" rx="3" ry="4" fill="#ef4444" opacity="0.85"/>
+    {/* Sparkle stars */}
+    <text x="9" y="20" fontSize="10" fill="#fbbf24" fontFamily="sans-serif">✦</text>
+    <text x="60" y="16" fontSize="12" fill="#fbbf24" fontFamily="sans-serif">✦</text>
+    <text x="6" y="40" fontSize="8" fill="#fbbf24" fontFamily="sans-serif">✦</text>
+    <text x="63" y="38" fontSize="8" fill="#fbbf24" fontFamily="sans-serif">✦</text>
+  </svg>
+);
+
+const PLAN_ICONS = { basic: PaperPlaneIcon, standard: AirplaneIcon, premium: RocketIcon };
+
 function FeatureCheck({ enabled }) {
   return (
     <div style={{
@@ -137,21 +203,44 @@ export default function PricingPage() {
                         borderRadius: "12px 12px 0 0",
                         position: "relative",
                       }}>
-                        <BlockStack gap="200">
-                          <InlineStack align="space-between" blockAlign="center">
-                            <Text variant="headingLg" as="h2" fontWeight="bold">
-                              {plan.name}
-                            </Text>
-                            {isCurrent && <Badge tone="success">Current</Badge>}
-                          </InlineStack>
-                          <InlineStack gap="100" blockAlign="end">
-                            <Text variant="heading2xl" as="p" fontWeight="bold">
-                              {plan.price === 0 ? "Free" : `$${plan.price}`}
-                            </Text>
-                            {plan.price > 0 && (
-                              <Text as="span" variant="bodyMd" tone="subdued">/ month</Text>
+                        <BlockStack gap="300">
+                          {/* Plan Icon */}
+                          <div style={{ display: 'flex', justifyContent: 'center' }}>
+                            <div style={{
+                              background: 'rgba(255,255,255,0.75)',
+                              borderRadius: '16px',
+                              padding: '12px 16px',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+                            }}>
+                              {(() => { const Icon = PLAN_ICONS[key]; return <Icon />; })()}
+                            </div>
+                          </div>
+
+                          <BlockStack gap="100">
+                            <div style={{ textAlign: 'center' }}>
+                              <Text variant="headingLg" as="h2" fontWeight="bold">
+                                {plan.name}
+                              </Text>
+                            </div>
+                            {isCurrent && (
+                              <div style={{ display: 'flex', justifyContent: 'center' }}>
+                                <Badge tone="success">Current</Badge>
+                              </div>
                             )}
-                          </InlineStack>
+                            <div style={{ textAlign: 'center' }}>
+                              <InlineStack gap="100" blockAlign="end" align="center">
+                                <Text variant="heading2xl" as="p" fontWeight="bold">
+                                  {plan.price === 0 ? "Free" : `$${plan.price}`}
+                                </Text>
+                                {plan.price > 0 && (
+                                  <Text as="span" variant="bodyMd" tone="subdued">/ month</Text>
+                                )}
+                              </InlineStack>
+                            </div>
+                          </BlockStack>
                         </BlockStack>
                       </div>
 

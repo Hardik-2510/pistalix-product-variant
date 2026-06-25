@@ -907,6 +907,19 @@ export default function ElementEditor({ element, allElements = [], onChange, onB
                     </Box>
                   )}
                   
+                  {/* Variant Fetcher Custom Native Selector to Hide */}
+                  {(element.type === "Variant Fetcher" || element.type === "variant_fetcher") && (
+                    <Box paddingBlockEnd="400">
+                      <TextField
+                        label="Custom Native Selector to Hide"
+                        value={element.config?.nativeSelectorToHide || ""}
+                        onChange={(val) => handleConfigChange("nativeSelectorToHide", val)}
+                        helpText="Optional: Enter a specific CSS class or selector to hide if your theme uses non-standard variant selectors (e.g., '.my-custom-swatch')."
+                        autoComplete="off"
+                      />
+                    </Box>
+                  )}
+
                   {/* Min / Max Characters */}
                   {showMinMaxChars && (
                     <InlineStack gap="400">

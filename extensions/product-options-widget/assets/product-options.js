@@ -1020,7 +1020,7 @@ function applyDynamicStyles(wrapper) {
   var swRad = borders.swatchRadius !== undefined ? borders.swatchRadius : 4;
 
   // Base state
-  css += '.cap-options-wrapper .cap-button-swatch { color: ' + btnText + ' !important; background-color: ' + btnBg + ' !important; border-color: ' + swB + ' !important; border-width: ' + swSize + 'px !important; border-radius: ' + swRad + 'px !important; }\n';
+  css += '.cap-options-wrapper .cap-button-swatch { color: ' + btnText + ' !important; background-color: ' + btnBg + ' !important; border-color: ' + swB + ' !important; border-width: ' + swSize + 'px !important; border-radius: ' + swRad + 'px !important; width: auto !important; display: inline-flex !important; align-items: center; justify-content: center; box-sizing: border-box; border-style: solid; }\n';
   css += '.cap-options-wrapper .cap-color-swatch, .cap-options-wrapper .cap-image-swatch { border-color: ' + swB + ' !important; border-width: ' + swSize + 'px !important; border-radius: ' + swRad + 'px !important; border-style: solid !important; }\n';
 
   // Hover state
@@ -1224,10 +1224,13 @@ function injectIntoCartForm(wrapper, container) {
     if (cartForm) {
       var submitBtn = cartForm.querySelector('button[type="submit"], input[type="submit"], [name="add"]');
       if (submitBtn && submitBtn.parentNode) {
+        var buttonsContainer = submitBtn.closest('.product-form-buttons, .product-form__buttons, .product-form__controls-group');
+        var targetEl = buttonsContainer ? buttonsContainer : submitBtn;
+        
         if (position === "Below add to cart button") {
-          submitBtn.parentNode.insertBefore(wrapper, submitBtn.nextSibling);
+          targetEl.parentNode.insertBefore(wrapper, targetEl.nextSibling);
         } else {
-          submitBtn.parentNode.insertBefore(wrapper, submitBtn); // Above
+          targetEl.parentNode.insertBefore(wrapper, targetEl); // Above
         }
       } else {
         cartForm.appendChild(wrapper);
@@ -2352,18 +2355,9 @@ function renderBundle(element) {
             var btn = document.createElement('button');
             btn.type = 'button';
             btn.textContent = variant.title;
-            btn.className = 'cap-bundle-variant-btn';
-            btn.style.cssText = [
-              'padding:6px 16px',
-              'border-radius:4px',
-              'cursor:pointer',
-              'font-size:13px',
-              'font-weight:600',
-              'transition:all 0.15s ease',
-              'border:' + (vIdx === defaultVarIdx ? '2px solid #1a1a1a' : '1px solid #e1e3e5'),
-              'background:' + (vIdx === defaultVarIdx ? '#1a1a1a' : '#fff'),
-              'color:' + (vIdx === defaultVarIdx ? '#fff' : '#1a1a1a'),
-            ].join(';');
+            // Use same class as Button swatch so it inherits all theme CSS (colors, radius, border, hover)
+            btn.className = 'cap-button-swatch' + (vIdx === defaultVarIdx ? ' cap-selected' : '');
+            btn.style.cssText = 'padding:6px 16px; font-size:13px; font-weight:600; cursor:pointer; transition:all 0.15s ease; margin:0; width:auto !important; flex-shrink:0;';
 
             if (!variant.available) {
               btn.style.opacity = '0.4';
@@ -2375,15 +2369,11 @@ function renderBundle(element) {
               if (!variant.available) return;
 
               // Update all buttons in this swatch group
-              var allBtns = swatchWrap.querySelectorAll('.cap-bundle-variant-btn');
+              var allBtns = swatchWrap.querySelectorAll('.cap-button-swatch');
               for (var b = 0; b < allBtns.length; b++) {
-                allBtns[b].style.border = '1px solid #e1e3e5';
-                allBtns[b].style.background = '#fff';
-                allBtns[b].style.color = '#1a1a1a';
+                allBtns[b].classList.remove('cap-selected');
               }
-              btn.style.border = '2px solid #1a1a1a';
-              btn.style.background = '#1a1a1a';
-              btn.style.color = '#fff';
+              btn.classList.add('cap-selected');
 
               // Update variant label
               variantLabel.textContent = variant.title;
@@ -3842,22 +3832,6 @@ function renderVariantFetcher(element) {
   loadingEl.style.cssText = 'font-size:13px;color:#8c9196;padding:8px 0;';
   group.appendChild(loadingEl);
 
-  // Detect product handle from the current page URL
-  var productHandle = '';
-  var pathParts = window.location.pathname.split('/');
-  for (var pi = 0; pi < pathParts.length; pi++) {
-    if (pathParts[pi] === 'products' && pathParts[pi + 1]) {
-      productHandle = pathParts[pi + 1].split('?')[0];
-      break;
-    }
-  }
-
-  if (!productHandle) {
-    loadingEl.textContent = 'Could not detect product. Variant Fetcher works only on product pages.';
-    loadingEl.style.color = '#d72c0d';
-    return group;
-  }
-
   // Hidden input to store variant ID for the cart properties
   var hiddenVariantInput = document.createElement('input');
   hiddenVariantInput.type = 'hidden';
@@ -3868,8 +3842,28 @@ function renderVariantFetcher(element) {
   hiddenVariantInput.className = 'cap-input-hidden';
   group.appendChild(hiddenVariantInput);
 
-  fetch('/products/' + productHandle + '.js?v=' + Date.now())
-    .then(function (res) { return res.json(); })
+  // Helper to fetch product JSON with Liquid fallback and caching
+  function getProductData() {
+    if (window.__capProductCache) return Promise.resolve(window.__capProductCache);
+    var container = document.getElementById('cap-product-options');
+    var jsonAttr = container && container.dataset.productJson;
+    if (jsonAttr) {
+      try { var data = JSON.parse(jsonAttr); window.__capProductCache = data; return Promise.resolve(data); }
+      catch (e) { console.warn('Failed to parse data-product-json', e); }
+    }
+    // Fallback to AJAX endpoint
+    var pathParts = window.location.pathname.split('/');
+    var handle = '';
+    for (var i = 0; i < pathParts.length; i++) {
+      if (pathParts[i] === 'products' && pathParts[i + 1]) { handle = pathParts[i + 1].split('?')[0]; break; }
+    }
+    if (!handle) return Promise.reject('Product handle not found');
+    return fetch('/products/' + handle + '.js?v=' + Date.now())
+      .then(function (r) { return r.ok ? r.json() : Promise.reject('Fetch error'); })
+      .then(function (data) { window.__capProductCache = data; return data; });
+  }
+
+  getProductData()
     .then(function (productData) {
       loadingEl.remove();
 
@@ -3916,20 +3910,25 @@ function renderVariantFetcher(element) {
       optionsContainer.style.cssText = 'display:flex;flex-direction:column;gap:12px;';
       group.appendChild(optionsContainer);
 
-      // Function to find matching variant from selected options
-      function findMatchingVariant() {
-        for (var vi = 0; vi < variants.length; vi++) {
-          var v = variants[vi];
-          var match = true;
-          for (var oki = 0; oki < options.length; oki++) {
-            if (String(v['option' + (oki + 1)]) !== String(selectedOptions[oki])) {
-              match = false;
-              break;
-            }
-          }
-          if (match) return v;
+      // Precompute a map for O(1) variant lookups based on option values
+      var variantMap = {};
+      for (var vi = 0; vi < variants.length; vi++) {
+        var v = variants[vi];
+        var keyParts = [];
+        for (var oi = 0; oi < options.length; oi++) {
+          keyParts.push(String(v['option' + (oi + 1)]));
         }
-        return null;
+        variantMap[keyParts.join(' / ')] = v;
+      }
+
+      // Function to find matching variant from selected options using O(1) lookup
+      function findMatchingVariant() {
+        var keyParts = [];
+        for (var oki = 0; oki < options.length; oki++) {
+          if (selectedOptions[oki] === null || selectedOptions[oki] === undefined) return null;
+          keyParts.push(String(selectedOptions[oki]));
+        }
+        return variantMap[keyParts.join(' / ')] || null;
       }
 
       // Function to check if a value for a specific option position is available
@@ -3953,15 +3952,28 @@ function renderVariantFetcher(element) {
         return false;
       }
 
+      function getRelevantForms() {
+        var closest = group.closest('form');
+        if (closest) return [closest];
+        
+        var card = group.closest('.product-card, .grid-item, .card, .product-item, .quick-add-modal, .quick-view');
+        if (card) {
+          var forms = card.querySelectorAll('form[action*="/cart/add"], form.product-form');
+          if (forms.length > 0) return Array.prototype.slice.call(forms);
+        }
+        
+        return Array.prototype.slice.call(document.querySelectorAll('form[action*="/cart/add"], form.product-form'));
+      }
+
       var isVfSyncing = false;
 
       // Function to update the main product form's variant ID
       function updateProductFormVariantId(variant) {
         if (isVfSyncing) return;
         var variantId = variant ? variant.id : '';
-        // Update the form's hidden input[name="id"] so the correct variant is added to cart
-        var forms = document.querySelectorAll('form[action*="/cart/add"], form.product-form, form[data-type="add-to-cart-form"]');
-        forms.forEach(function (form) {
+        var forms = getRelevantForms();
+        
+        forms.forEach(function(form) {
           var idInput = form.querySelector('input[name="id"], select[name="id"]');
           if (idInput && idInput.value !== variantId.toString()) {
             isVfSyncing = true;
@@ -3969,16 +3981,35 @@ function renderVariantFetcher(element) {
             idInput.dispatchEvent(new Event('change', { bubbles: true }));
             isVfSyncing = false;
           }
+
+          // Selling plan support
+          if (variant && variant.selling_plan_allocations && variant.selling_plan_allocations.length > 0) {
+            var spInput = form.querySelector('input[name="selling_plan"], select[name="selling_plan"]');
+            var currentSpId = spInput ? spInput.value : null;
+            var validSpIds = variant.selling_plan_allocations.map(function(alloc) { return alloc.selling_plan_id.toString(); });
+            
+            if (validSpIds.length > 0) {
+              var selectedSpId = validSpIds.indexOf(currentSpId) !== -1 ? currentSpId : validSpIds[0];
+              if (!spInput) {
+                spInput = document.createElement('input');
+                spInput.type = 'hidden';
+                spInput.name = 'selling_plan';
+                form.appendChild(spInput);
+              }
+              if (spInput.value !== selectedSpId) {
+                spInput.value = selectedSpId;
+                spInput.dispatchEvent(new Event('change', { bubbles: true }));
+              }
+            }
+          }
+
+          // Notify theme scripts
+          form.dispatchEvent(new CustomEvent('variant:change', { detail: { variant: variant } }));
         });
 
-        // Also try the common <variant-radios> or <variant-selects> Shopify elements
-        var variantInputs = document.querySelectorAll('input[name="id"][type="hidden"]');
-        variantInputs.forEach(function (inp) {
-          // Only update ones inside product forms, not our own widget
-          if (!inp.closest('.cap-options-wrapper') && inp.value !== variantId.toString()) {
-            inp.value = variantId;
-          }
-        });
+        if (variant && variant.price) {
+          document.dispatchEvent(new CustomEvent('product:price:update', { detail: { variant: variant } }));
+        }
       }
 
       // Collect any options that are being skipped/hidden from the user
@@ -4008,7 +4039,6 @@ function renderVariantFetcher(element) {
         // Update hidden input with selected variant info
         if (matchedVariant) {
           hiddenVariantInput.value = matchedVariant.title;
-          capConfig.basePrice = matchedVariant.price;
           updateProductFormVariantId(matchedVariant);
         } else {
           hiddenVariantInput.value = '';
@@ -4027,8 +4057,13 @@ function renderVariantFetcher(element) {
               for (var si = 0; si < opts.length; si++) {
                 if (opts[si].value === '') continue;
                 var avail = isOptionValueAvailable(oi, opts[si].value);
-                opts[si].disabled = !avail;
-                opts[si].textContent = opts[si].getAttribute('data-label') + (avail ? '' : ' (Unavailable)');
+                if (config.hideOutOfStock && !avail) {
+                  opts[si].style.display = 'none';
+                } else {
+                  opts[si].style.display = '';
+                  opts[si].disabled = !avail;
+                  opts[si].textContent = opts[si].getAttribute('data-label') + (avail ? '' : ' (Unavailable)');
+                }
               }
             }
           } else {
@@ -4038,19 +4073,29 @@ function renderVariantFetcher(element) {
               var isSelected = selectedOptions[oi] === btnValue;
               var avail = isOptionValueAvailable(oi, btnValue);
 
-              btns[bi].style.border = isSelected ? '2px solid #1a1a1a' : '1px solid #e1e3e5';
-              btns[bi].style.background = isSelected ? '#1a1a1a' : '#fff';
-              btns[bi].style.color = isSelected ? '#fff' : '#1a1a1a';
-              btns[bi].style.opacity = avail ? '1' : '0.4';
-              btns[bi].style.textDecoration = avail ? 'none' : 'line-through';
-              btns[bi].style.cursor = avail ? 'pointer' : 'not-allowed';
+              if (config.hideOutOfStock && !avail) {
+                btns[bi].style.display = 'none';
+              } else {
+                btns[bi].style.display = '';
+                if (isSelected) {
+                  btns[bi].classList.add('cap-selected');
+                  btns[bi].setAttribute('aria-checked', 'true');
+                  btns[bi].tabIndex = 0;
+                } else {
+                  btns[bi].classList.remove('cap-selected');
+                  btns[bi].setAttribute('aria-checked', 'false');
+                  btns[bi].tabIndex = -1;
+                }
+                btns[bi].style.opacity = avail ? '1' : '0.4';
+                btns[bi].style.textDecoration = avail ? 'none' : 'line-through';
+                btns[bi].style.cursor = avail ? 'pointer' : 'not-allowed';
+              }
             }
           }
         }
 
         hiddenVariantInput.dispatchEvent(new Event('change', { bubbles: true }));
         hiddenVariantInput.dispatchEvent(new Event('input', { bubbles: true }));
-        updateTotalPrice();
       }
 
       // Render each option group
@@ -4069,7 +4114,6 @@ function renderVariantFetcher(element) {
         optLabel.style.cssText = 'font-weight:600;font-size:14px;margin-bottom:6px;';
         optLabel.textContent = opt.name;
 
-        // Show selected value next to label
         var selectedValueSpan = document.createElement('span');
         selectedValueSpan.style.cssText = 'font-weight:normal;color:#6d7175;margin-left:6px;';
         selectedValueSpan.textContent = selectedOptions[optIdx] || '';
@@ -4099,80 +4143,49 @@ function renderVariantFetcher(element) {
           select.addEventListener('change', function () {
             selectedOptions[optIdx] = select.value || null;
             selectedValueSpan.textContent = select.value || '';
-
-            var exactMatch = findMatchingVariant();
-            if (!exactMatch || !exactMatch.available) {
-              for (var vi = 0; vi < variants.length; vi++) {
-                if (variants[vi].available && variants[vi]['option' + (optIdx + 1)] === select.value) {
-                  for (var oki = 0; oki < options.length; oki++) {
-                    if (oki !== optIdx) {
-                      selectedOptions[oki] = variants[vi]['option' + (oki + 1)];
-                      var otherGroup = optionsContainer.querySelector('[data-option-index="' + oki + '"]');
-                      if (otherGroup) {
-                        var span = otherGroup.querySelector('span');
-                        if (span) span.textContent = selectedOptions[oki];
-                        if (displayStyle === 'dropdown') {
-                          var oSel = otherGroup.querySelector('select');
-                          if (oSel) oSel.value = selectedOptions[oki];
-                        }
-                      }
-                    }
-                  }
-                  break;
-                }
-              }
-            }
             updateAllOptions();
           });
 
           optionGroup.appendChild(select);
         } else {
-          // Button swatches (default)
           var btnWrap = document.createElement('div');
           btnWrap.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;';
+          btnWrap.setAttribute('role', 'radiogroup');
+          btnWrap.setAttribute('aria-label', opt.name);
 
           opt.values.forEach(function (val) {
             var btn = document.createElement('button');
             btn.type = 'button';
             btn.textContent = val;
-            btn.className = 'cap-vf-btn';
-            btn.setAttribute('data-value', val);
             var isSelected = selectedOptions[optIdx] === val;
-            btn.style.cssText = [
-              'padding:6px 16px',
-              'border-radius:4px',
-              'cursor:pointer',
-              'font-size:13px',
-              'font-weight:600',
-              'transition:all 0.15s ease',
-              'border:' + (isSelected ? '2px solid #1a1a1a' : '1px solid #e1e3e5'),
-              'background:' + (isSelected ? '#1a1a1a' : '#fff'),
-              'color:' + (isSelected ? '#fff' : '#1a1a1a'),
-            ].join(';');
+            btn.className = 'cap-button-swatch cap-vf-btn' + (isSelected ? ' cap-selected' : '');
+            btn.setAttribute('data-value', val);
+            btn.setAttribute('role', 'radio');
+            btn.setAttribute('aria-checked', isSelected ? 'true' : 'false');
+            btn.tabIndex = isSelected ? 0 : (selectedOptions[optIdx] === null ? 0 : -1);
+            btn.style.cssText = 'padding:6px 16px; font-size:13px; font-weight:600; cursor:pointer; transition:all 0.15s ease; margin:0; width:auto !important; flex-shrink:0;';
 
             btn.addEventListener('click', function () {
               selectedOptions[optIdx] = val;
               selectedValueSpan.textContent = val;
-
-              var exactMatch = findMatchingVariant();
-              if (!exactMatch || !exactMatch.available) {
-                for (var vi = 0; vi < variants.length; vi++) {
-                  if (variants[vi].available && variants[vi]['option' + (optIdx + 1)] === val) {
-                    for (var oki = 0; oki < options.length; oki++) {
-                      if (oki !== optIdx) {
-                        selectedOptions[oki] = variants[vi]['option' + (oki + 1)];
-                        var otherGroup = optionsContainer.querySelector('[data-option-index="' + oki + '"]');
-                        if (otherGroup) {
-                          var span = otherGroup.querySelector('span');
-                          if (span) span.textContent = selectedOptions[oki];
-                        }
-                      }
-                    }
-                    break;
-                  }
-                }
-              }
               updateAllOptions();
+            });
+
+            btn.addEventListener('keydown', function(e) {
+              var allBtns = Array.prototype.slice.call(btnWrap.querySelectorAll('.cap-vf-btn:not([style*="display: none"])'));
+              var currentIndex = allBtns.indexOf(btn);
+              var nextBtn = null;
+              if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+                e.preventDefault();
+                nextBtn = allBtns[currentIndex + 1] || allBtns[0];
+              } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+                e.preventDefault();
+                nextBtn = allBtns[currentIndex - 1] || allBtns[allBtns.length - 1];
+              }
+              if (nextBtn) {
+                nextBtn.focus();
+                nextBtn.click();
+              }
             });
 
             btnWrap.appendChild(btn);
@@ -4184,42 +4197,62 @@ function renderVariantFetcher(element) {
         optionsContainer.appendChild(optionGroup);
       });
 
-      // Initial availability check
       updateAllOptions();
-
-      // Hide original variant selectors if config says so
+      // Find the form that this widget belongs to – prefer the closest form, fallback to the first cart form
+      var form = group.closest('form') || document.querySelector('form[action*="/cart/add"]');
+      
+      // Scoped hide‑native‑variants – hide native selectors if hideOriginal config is true
       if (hideOriginal) {
-        var selectorsToHide = [
-          'variant-radios',
-          'variant-selects',
-          '.product-form__input--variant',
-          '.product-form__variants',
-          'fieldset.product-form__input',
-          '.swatch',
-          '[data-option-index]',
+        var rawSelectors = [
+          'variant-radios', 'variant-selects',
+          '.product-form__input--variant', '.product-form__variants',
+          'fieldset.product-form__input', '.product-form__option',
+          '.swatch-list', '.variant-wrapper', '.product__variants',
+          '.option-selector', '.variant-input-wrap',
+          'fieldset[data-option-index]', '[data-option-index]'
         ];
-        // Small delay to ensure theme elements have rendered
-        setTimeout(function () {
-          selectorsToHide.forEach(function (sel) {
-            var els = document.querySelectorAll(sel);
-            els.forEach(function (el) {
-              // Don't hide our own elements
-              if (el.closest('.cap-options-wrapper')) return;
-              el.style.setProperty('display', 'none', 'important');
-            });
-          });
-        }, 200);
+
+        if (config.nativeSelectorToHide && config.nativeSelectorToHide.trim() !== '') {
+          rawSelectors.push(config.nativeSelectorToHide.trim());
+        }
+
+        // Instead of inline styles, inject a scoped <style> block so it persists through Dawn's DOM updates.
+        var isQuickView = !!group.closest('[data-quick-view], .modal, .quick-view');
+        var scopeContainer = group.closest(
+            isQuickView ? '[data-quick-view], .modal, .quick-view' 
+                        : '.shopify-section, .product-section, .product-info, [id^="ProductInfo-"]'
+        );
+
+        var styleId = 'cap-vf-style-' + Math.random().toString(36).substr(2, 9);
+        var cssRules = '';
+        
+        if (scopeContainer) {
+            var scopeClass = 'cap-vf-scope-' + Math.random().toString(36).substr(2, 9);
+            scopeContainer.classList.add(scopeClass);
+            var prefix = '.' + scopeClass + ' ';
+            cssRules = rawSelectors.map(function(s) { return prefix + s + ':not(.cap-options-wrapper *)'; }).join(',\n') + ' { display: none !important; }';
+        } else {
+            // Fallback to global if no container found
+            cssRules = rawSelectors.map(function(s) { return s + ':not(.cap-options-wrapper *)'; }).join(',\n') + ' { display: none !important; }';
+        }
+        
+        var styleEl = document.createElement('style');
+        styleEl.id = styleId;
+        styleEl.innerHTML = cssRules;
+        document.head.appendChild(styleEl);
       }
 
       // Listen to form changes to keep our state in sync with native variants
-      var forms = document.querySelectorAll('form[action*="/cart/add"], form.product-form');
-      forms.forEach(function (form) {
-        form.addEventListener('change', function (e) {
+      // Sync logic will use this single form reference
+      (function syncForm() { /* placeholder – actual sync logic remains unchanged */ })();
+      // Continue with existing variant sync code using the "form" variable
+      getRelevantForms().forEach(function(currentForm) {
+        currentForm.addEventListener('change', function (e) {
           if (isVfSyncing) return;
           if (e.target.closest('.cap-options-wrapper')) return; // Ignore our own changes
 
           setTimeout(function () {
-            var idInput = form.querySelector('input[name="id"], select[name="id"]');
+            var idInput = currentForm.querySelector('input[name="id"], select[name="id"]');
             if (idInput && idInput.value) {
               var nativeVid = idInput.value.toString();
               var matched = null;
@@ -4250,7 +4283,6 @@ function renderVariantFetcher(element) {
           }, 50); // slight delay to allow theme to update input[name="id"]
         });
       });
-
     })
     .catch(function (err) {
       loadingEl.textContent = 'Could not load product variants.';
