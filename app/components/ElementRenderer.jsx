@@ -842,11 +842,12 @@ export default function ElementRenderer({ element, value, onChange }) {
     case "range_slider":
       return (
         <Box>
-           <Text as="p" variant="bodySm" fontWeight="semibold">{label}</Text>
+           <Box paddingBlockEnd="100">{renderLabelContent()}</Box>
            <InlineStack gap="200" blockAlign="center">
               <input type="range" min={config.min || 0} max={config.max || 100} step={config.step || 1} value={value || 0} onChange={(e) => handleTextChange(e.target.value)} />
               <Text as="span">{value || 0} {config.unit || ""}</Text>
            </InlineStack>
+           {renderHelpText()}
         </Box>
       );
 
@@ -857,7 +858,7 @@ export default function ElementRenderer({ element, value, onChange }) {
       };
       return (
         <Box>
-          <Text as="p" variant="bodySm" fontWeight="semibold">{label}</Text>
+          <Box paddingBlockEnd="100">{renderLabelContent()}</Box>
           <Box paddingBlockStart="200">
             <InlineStack gap="200" blockAlign="center">
               <TextField
@@ -885,6 +886,7 @@ export default function ElementRenderer({ element, value, onChange }) {
               )}
             </InlineStack>
           </Box>
+          {renderHelpText()}
         </Box>
       );
     }
@@ -1019,11 +1021,12 @@ export default function ElementRenderer({ element, value, onChange }) {
     case "color picker":
       return (
         <Box>
-          <Text as="p" variant="bodySm" fontWeight="semibold" paddingBlockEnd="100">{label}{getAddOnText(config)}</Text>
+          <Box paddingBlockEnd="100">{renderLabelContent()}</Box>
           <ColorPickerInput 
              value={value || config.defaultColor || "#000000"} 
              onChange={handleTextChange} 
           />
+          {renderHelpText()}
         </Box>
       );
 
@@ -1160,7 +1163,7 @@ export default function ElementRenderer({ element, value, onChange }) {
                })}
              </div>
            </Popover>
-           {config.helpText && <Box paddingBlockStart="100"><Text as="p" tone="subdued" variant="bodySm">{config.helpText}</Text></Box>}
+           {renderHelpText()}
         </Box>
       );
     }
@@ -1169,7 +1172,7 @@ export default function ElementRenderer({ element, value, onChange }) {
       const products = config.products || [];
       return (
         <Box>
-          <Text as="p" variant="bodySm" fontWeight="semibold">{label}</Text>
+          <Box paddingBlockEnd="100">{renderLabelContent()}</Box>
           <Box paddingBlockStart="200">
             <InlineStack gap="200" wrap>
               {products.map((p, i) => (
@@ -1182,6 +1185,7 @@ export default function ElementRenderer({ element, value, onChange }) {
               ))}
             </InlineStack>
           </Box>
+          {renderHelpText()}
         </Box>
       );
     }
@@ -1230,7 +1234,7 @@ export default function ElementRenderer({ element, value, onChange }) {
       }
       return (
         <Box>
-          <Text as="p" variant="bodySm" fontWeight="semibold" paddingBlockEnd="200">{label}</Text>
+          <Box paddingBlockEnd="100">{renderLabelContent()}</Box>
           <BlockStack gap="400">
             {bundleProducts.map((product, pIdx) => {
               const variants = product.variants || [];
@@ -1274,6 +1278,7 @@ export default function ElementRenderer({ element, value, onChange }) {
               );
             })}
           </BlockStack>
+          {renderHelpText()}
         </Box>
       );
     }
@@ -1285,7 +1290,7 @@ export default function ElementRenderer({ element, value, onChange }) {
       ];
       return (
         <Box>
-          <Text as="p" variant="bodySm" fontWeight="semibold" paddingBlockEnd="200">{label}</Text>
+          <Box paddingBlockEnd="100">{renderLabelContent()}</Box>
           <Box padding="300" background="bg-surface-secondary" borderWidth="025" borderColor="border" borderRadius="200">
             <BlockStack gap="300">
               <InlineStack gap="100" blockAlign="center">
@@ -1325,6 +1330,7 @@ export default function ElementRenderer({ element, value, onChange }) {
               ))}
             </BlockStack>
           </Box>
+          {renderHelpText()}
         </Box>
       );
     }

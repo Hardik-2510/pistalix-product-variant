@@ -776,6 +776,34 @@ function createGroup(element) {
     labelWrap.style.display = 'none';
   }
 
+  // Handle static Add-on Price for non-choice elements (Text, Number, File Upload, etc.)
+  var p = parseFloat(config.price);
+  if (!isNaN(p) && p > 0 && !config.choices) {
+    var cents = p * 100;
+    var settings = capConfig.settings || {};
+    var addonMoneyFormat = settings.addonMoneyFormat || "With currency";
+    var addonLabelFormat = settings.addonLabelFormat || "(+ {{addon}})";
+    var moneyFormat = capConfig.moneyFormat || '${{amount}}';
+    var formattedMoney = formatMoney(cents, moneyFormat);
+    
+    if (addonMoneyFormat === "Without currency") {
+      formattedMoney = formatMoney(cents, '{{amount}}');
+    }
+    if (formattedMoney.endsWith('.00')) {
+      formattedMoney = formattedMoney.slice(0, -3);
+    }
+    var addonString = addonLabelFormat.replace('{{addon}}', formattedMoney);
+    addonString = addonString.replace(/\(\+\s+/, '(+');
+
+    var addonSpan = document.createElement('span');
+    addonSpan.className = 'cap-addon-price';
+    addonSpan.style.fontWeight = 'normal';
+    addonSpan.style.color = 'var(--p-color-text-subdued, #666)';
+    addonSpan.style.marginLeft = '4px';
+    addonSpan.textContent = addonString;
+    labelWrap.appendChild(addonSpan);
+  }
+
   var helpText = config.helpText;
 
   if (helpText) {
@@ -1048,12 +1076,24 @@ function validateCustomOptions() {
           if (input) input.classList.add('error');
         }
       }
-    } else if (['Radio Button', 'Color Swatch', 'Image Swatch', 'Button', 'Variant Fetcher', 'Variant_fetcher', 'variant fetcher'].indexOf(type) !== -1 || (type && type.toLowerCase() === 'variant fetcher')) {
+    } else if (['Radio Button', 'Color Swatch', 'Image Swatch', 'Button', 'Variant Fetcher', 'Variant_fetcher', 'variant fetcher', 'Color Picker', 'Hidden Field'].indexOf(type) !== -1 || (type && type.toLowerCase() === 'variant fetcher')) {
       var hiddenInput = group.querySelector('input[type="hidden"]:not([name="properties[_skipped_options]"])');
       if (isRequired && (!hiddenInput || !hiddenInput.value)) {
         isGroupValid = false;
         var swatchGroup = group.querySelector('.cap-swatch-group, .cap-radio-group, .cap-vf-options');
         if (swatchGroup) swatchGroup.classList.add('error');
+      }
+    } else if (type === 'Switch') {
+      var hiddenInput = group.querySelector('input[type="hidden"]');
+      if (isRequired && (!hiddenInput || hiddenInput.value !== 'true')) {
+        isGroupValid = false;
+        var switchWrap = group.querySelector('.cap-switch-wrap');
+        if (switchWrap) switchWrap.classList.add('error');
+      }
+    } else if (type === 'Bundle') {
+      var hiddenInput = group.querySelector('input[type="hidden"]');
+      if (isRequired && (!hiddenInput || !hiddenInput.value || hiddenInput.value === '[]')) {
+        isGroupValid = false;
       }
     } else if (type === 'Checkbox') {
       var checked = group.querySelectorAll('input[type="checkbox"]:checked');
@@ -1769,15 +1809,6 @@ function renderFile(element) {
   allowedExtsText.textContent = '(Allowed extension: ' + (config.allowedExtensions || '.jpeg, .jpg, .png, .webp, .svg') + ')';
   wrapper.appendChild(allowedExtsText);
 
-  if (config.helpText && config.helpTextPosition === "Tooltip") {
-    var label = group.querySelector('.cap-label');
-    if (label) {
-      label.innerHTML += ' <span style="cursor:help; color:var(--p-color-text-subdued, #666);" title="' + escapeHTML(config.helpText) + '">ⓘ</span>';
-    }
-    var existingHelp = group.querySelector('.cap-help-text');
-    if (existingHelp) existingHelp.style.display = 'none';
-  }
-
   group.appendChild(wrapper);
   group.appendChild(createErrorMsg());
   return group;
@@ -1894,6 +1925,8 @@ function renderNumber(element) {
   input.className = 'cap-input';
   if (config.placeholder) input.placeholder = config.placeholder;
   if (config.defaultValue) input.value = config.defaultValue;
+  if (config.minValue !== undefined && config.minValue !== "") input.min = config.minValue;
+  if (config.maxValue !== undefined && config.maxValue !== "") input.max = config.maxValue;
 
   var p = parseFloat(config.price);
   if (!isNaN(p) && p > 0) {
@@ -2014,13 +2047,11 @@ function renderColorDropdown(element) {
   selectedText.textContent = '-- Select ' + element.label + ' --';
   selectedDisplay.appendChild(selectedText);
 
-  var hiddenInput = document.createElement('input');
-  hiddenInput.type = 'hidden';
-  hiddenInput.name = propName(element.label);
-  hiddenInput.value = '';
+  // Removed redundant hiddenInput
 
   var select = document.createElement('select');
   select.className = 'cap-select cap-color-dropdown-select';
+  select.name = propName(element.label);
 
   var defaultOpt = document.createElement('option');
   defaultOpt.value = '';
@@ -2059,20 +2090,18 @@ function renderColorDropdown(element) {
     item.appendChild(label);
 
     item.addEventListener('click', function () {
-      hiddenInput.value = opt.value || opt.label;
       select.value = opt.value || opt.label;
       selectedText.textContent = getOptionLabel(opt);
       colorPreview.style.backgroundColor = colorVal;
       colorPreview.style.display = 'inline-block';
       optionsList.style.display = 'none';
-      hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
-      hiddenInput.dispatchEvent(new Event('input', { bubbles: true }));
       select.dispatchEvent(new Event('change', { bubbles: true }));
+      select.dispatchEvent(new Event('input', { bubbles: true }));
       updateTotalPrice();
     });
 
     if (isDefault(opt, config)) {
-      hiddenInput.value = opt.value || opt.label;
+      select.value = opt.value || opt.label;
       selectedText.textContent = getOptionLabel(opt);
       colorPreview.style.backgroundColor = colorVal;
       colorPreview.style.display = 'inline-block';
@@ -2096,7 +2125,6 @@ function renderColorDropdown(element) {
 
   layoutWrap.appendChild(dropdownWrap);
 
-  group.appendChild(hiddenInput);
   group.appendChild(select);
   group.appendChild(layoutWrap);
   group.appendChild(createErrorMsg());
@@ -2468,13 +2496,11 @@ function renderImageDropdown(element) {
   selectedText.textContent = '-- Select ' + element.label + ' --';
   selectedDisplay.appendChild(selectedText);
 
-  var hiddenInput = document.createElement('input');
-  hiddenInput.type = 'hidden';
-  hiddenInput.name = propName(element.label);
-  hiddenInput.value = '';
+  // Removed hiddenInput
 
   var select = document.createElement('select');
   select.className = 'cap-select cap-image-dropdown-select';
+  select.name = propName(element.label);
 
   var defaultOpt = document.createElement('option');
   defaultOpt.value = '';
@@ -2515,24 +2541,23 @@ function renderImageDropdown(element) {
     item.appendChild(label);
 
     item.addEventListener('click', function () {
-      hiddenInput.value = opt.value || opt.label;
+      var imgVal = opt.image;
       select.value = opt.value || opt.label;
       selectedText.textContent = getOptionLabel(opt);
-      if (opt.image) {
-        imgPreview.src = opt.image;
+      if (imgVal) {
+        imgPreview.src = imgVal;
         imgPreview.style.display = 'inline-block';
       } else {
         imgPreview.style.display = 'none';
       }
       optionsList.style.display = 'none';
-      hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
-      hiddenInput.dispatchEvent(new Event('input', { bubbles: true }));
       select.dispatchEvent(new Event('change', { bubbles: true }));
+      select.dispatchEvent(new Event('input', { bubbles: true }));
       updateTotalPrice();
     });
 
     if (isDefault(opt, config)) {
-      hiddenInput.value = opt.value || opt.label;
+      select.value = opt.value || opt.label;
       selectedText.textContent = getOptionLabel(opt);
       if (opt.image) {
         imgPreview.src = opt.image;
@@ -2557,7 +2582,6 @@ function renderImageDropdown(element) {
   dropdownWrap.appendChild(optionsList);
   layoutWrap.appendChild(dropdownWrap);
 
-  group.appendChild(hiddenInput);
   group.appendChild(select);
   group.appendChild(layoutWrap);
   group.appendChild(createErrorMsg());
