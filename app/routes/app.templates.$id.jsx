@@ -29,6 +29,9 @@ import ProductRuleBuilder from "../components/ProductRuleBuilder";
 import { useUnsavedChanges } from "../hooks/useUnsavedChanges";
 import { syncOptionSetToMetafields } from "../lib/metafields.server";
 import { getShopFeatures } from "../lib/features.server";
+// Bundled seed catalogs (see note in app.templates._index.jsx).
+import PREDEFINED_TEMPLATES from "../lib/predefinedTemplates.json";
+import PERSONALIZED_TEMPLATES from "../lib/personalizedTemplates.json";
 
 export function ColorSwatchItem({ label, value, onChange }) {
   return (
@@ -77,28 +80,7 @@ export const loader = async ({ request, params }) => {
     
     let optionSet = null;
     if (predefinedId) {
-      let predefinedTemplates = [];
-      let personalizedTemplates = [];
-      
-      try { 
-        const path = await import("path");
-        const fs = await import("fs/promises");
-        // eslint-disable-next-line no-undef
-        const preDefPath = path.join(process.cwd(), 'app', 'lib', 'predefinedTemplates.json');
-        const preDefData = await fs.readFile(preDefPath, 'utf-8');
-        predefinedTemplates = JSON.parse(preDefData); 
-      } catch (e) { /* ignore */ }
-      
-      try { 
-        const path = await import("path");
-        const fs = await import("fs/promises");
-        // eslint-disable-next-line no-undef
-        const persPath = path.join(process.cwd(), 'app', 'lib', 'personalizedTemplates.json');
-        const persData = await fs.readFile(persPath, 'utf-8');
-        personalizedTemplates = JSON.parse(persData); 
-      } catch (e) { /* ignore */ }
-
-      const template = predefinedTemplates.find(t => t.id === predefinedId) || personalizedTemplates.find(t => t.id === predefinedId);
+      const template = PREDEFINED_TEMPLATES.find(t => t.id === predefinedId) || PERSONALIZED_TEMPLATES.find(t => t.id === predefinedId);
       
       if (template) {
         optionSet = {

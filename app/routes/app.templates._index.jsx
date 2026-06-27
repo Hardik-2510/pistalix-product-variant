@@ -20,6 +20,11 @@ import prisma from "../db.server";
 import { authenticate } from "../shopify.server";
 import { validateOptionSetLimit } from "../lib/features.server";
 import process from "process";
+// Seed catalogs are imported (bundled into the build) rather than read from
+// disk — the runtime Docker image doesn't ship the app/ source tree, so
+// fs.readFileSync(process.cwd()/app/lib/...) would return empty in production.
+import PREDEFINED_TEMPLATES from "../lib/predefinedTemplates.json";
+import PERSONALIZED_TEMPLATES from "../lib/personalizedTemplates.json";
 
 export const loader = async ({ request }) => {
   const { session, admin } = await authenticate.admin(request);
@@ -123,14 +128,14 @@ export const loader = async ({ request }) => {
 
   const isDev = process.env.NODE_ENV === "development";
 
-  const fs = await import("fs");
-  const path = await import("path");
-  let predefinedTemplates = [];
-  try { predefinedTemplates = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'app', 'lib', 'predefinedTemplates.json'), 'utf-8')); } catch(e){ /* ignore */ }
-  let personalizedTemplates = [];
-  try { personalizedTemplates = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'app', 'lib', 'personalizedTemplates.json'), 'utf-8')); } catch(e){ /* ignore */ }
-
-  return { optionSets: setsWithImages, limitCheck, shopDomain: session.shop, predefinedTemplates, personalizedTemplates, isDev };
+  return {
+    optionSets: setsWithImages,
+    limitCheck,
+    shopDomain: session.shop,
+    predefinedTemplates: PREDEFINED_TEMPLATES,
+    personalizedTemplates: PERSONALIZED_TEMPLATES,
+    isDev,
+  };
 };
 
 export const action = async ({ request }) => {
@@ -305,8 +310,7 @@ export const action = async ({ request }) => {
       }
       return { success: true };
     } catch (error) {
-      console.error("Import error:", error);
-      require('fs').writeFileSync('import-error.log', String(error) + '\n' + (error.stack || ''));
+      console.error("Import error:", error, error?.stack);
       return new Response(JSON.stringify({ error: "Import failed" }), { status: 500 });
     }
   }

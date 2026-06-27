@@ -4,7 +4,9 @@ import prisma from "../db.server";
 import OptionSetBuilder from "../components/OptionSetBuilder";
 import { syncOptionSetToMetafields } from "../lib/metafields.server";
 import { getShopFeatures, validateOptionSetLimit } from "../lib/features.server";
-import process from "process";
+// Bundled seed catalogs (see note in app.templates._index.jsx).
+import PREDEFINED_TEMPLATES from "../lib/predefinedTemplates.json";
+import PERSONALIZED_TEMPLATES from "../lib/personalizedTemplates.json";
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
@@ -28,14 +30,7 @@ export const loader = async ({ request }) => {
 
   const predefinedId = url.searchParams.get("predefinedId");
   if (predefinedId) {
-    const fs = await import("fs");
-    const path = await import("path");
-    let predefinedTemplates = [];
-    try { predefinedTemplates = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'app', 'lib', 'predefinedTemplates.json'), 'utf-8')); } catch(e){ /* ignore */ }
-    let personalizedTemplates = [];
-    try { personalizedTemplates = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'app', 'lib', 'personalizedTemplates.json'), 'utf-8')); } catch(e){ /* ignore */ }
-
-    const template = predefinedTemplates.find(t => t.id === predefinedId) || personalizedTemplates.find(t => t.id === predefinedId);
+    const template = PREDEFINED_TEMPLATES.find(t => t.id === predefinedId) || PERSONALIZED_TEMPLATES.find(t => t.id === predefinedId);
     if (template) {
       return { template };
     }
