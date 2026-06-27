@@ -95,8 +95,8 @@ SHOPIFY_CART_PRICE_OVERRIDE_ID=        # fill after Part D
 
 DATABASE_URL=file:./dev.sqlite         # ignored in Docker; compose sets the real path
 
-SPACES_KEY=DO00YEBCK78U64PTD4VK
-SPACES_SECRET=0pVRggtbSkPt7tdh9FjjXcaJPn3YnyY5zURM7B7VSys
+SPACES_KEY=<your-spaces-access-key>
+SPACES_SECRET=<your-spaces-secret-key>
 SPACES_REGION=sgp1
 SPACES_ENDPOINT=https://sgp1.digitaloceanspaces.com
 SPACES_BUCKET=king-vid
