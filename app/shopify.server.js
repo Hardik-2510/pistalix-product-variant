@@ -7,12 +7,14 @@ import {
 } from "@shopify/shopify-app-react-router/server";
 import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prisma";
 import prisma from "./db.server";
+import { ensureFeeConfig } from "./lib/feeProduct.server";
 
 // Shop-level metafields the theme widget reads via Liquid (shop.metafields.*).
 // They must have a definition with storefront PUBLIC_READ access to be exposed.
 const SHOP_METAFIELD_DEFINITIONS = [
   { name: "Global Product Options", namespace: "pistalix", key: "global_product_options" },
   { name: "Product Options Settings", namespace: "pistalix", key: "settings" },
+  { name: "Product Options Fee Config", namespace: "pistalix", key: "fee_config" },
 ];
 
 async function ensureShopMetafieldDefinitions(admin) {
@@ -81,6 +83,9 @@ const shopify = shopifyApp({
       // Ensure shop-level metafield definitions exist with storefront read
       // access, so the theme widget can read them via Liquid shop.metafields.*
       await ensureShopMetafieldDefinitions(admin);
+      // Detect Plus vs non-Plus and provision the fee product for non-Plus
+      // shops; writes the storefront-readable pistalix.fee_config metafield.
+      await ensureFeeConfig(admin);
       // Register code-defined webhooks (e.g. APP_SUBSCRIPTIONS_UPDATE).
       await shopify.registerWebhooks({ session });
     },

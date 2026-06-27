@@ -18,11 +18,13 @@
   {% endif %}
 
   {% assign app_settings = shop.metafields.pistalix.settings.value %}
+  {% assign fee_config = shop.metafields.pistalix.fee_config.value %}
 
-  <div 
+  <div
     id="cap-product-options"
     data-template-json="{{ template_data | json | escape }}"
     data-app-settings="{{ app_settings | json | escape }}"
+    data-fee-config="{{ fee_config | json | escape }}"
     data-source="{% if template_data != blank %}metafield{% else %}api{% endif %}"
     data-product-id="{{ product.id }}"
     data-product-price="{{ product.price }}"

@@ -50,6 +50,18 @@ function initPistalixWidget() {
     } catch (e) { console.warn("Pistalix: JSON parse failed", e); }
   }
 
+  // Pricing mode: Plus stores override the line price via the cart-transform
+  // Function; non-Plus stores charge add-ons through a hidden $0.01 fee product.
+  var feeAttr = container.getAttribute('data-fee-config');
+  if (feeAttr) {
+    try {
+      capConfig.feeConfig = JSON.parse(feeAttr);
+      if (typeof capConfig.feeConfig === 'string') {
+        capConfig.feeConfig = JSON.parse(capConfig.feeConfig);
+      }
+    } catch (e) { capConfig.feeConfig = null; }
+  }
+
   var toggleStates = getToggleStates();
 
   // Initialize cart page features globally (handles ajax carts/drawers as well)
@@ -483,6 +495,9 @@ function updateTotalPrice() {
 
 
   var finalPriceCents = capConfig.basePrice + totalAddonCents;
+  // Remember the latest add-on total so the fee-line helper (non-Plus path)
+  // knows how much to charge via the $0.01 fee product.
+  window.pistalixLastAddonCents = totalAddonCents;
   var formattedPrice = formatMoney(finalPriceCents, capConfig.moneyFormat);
 
   // Update Cart Transform Hidden Inputs
@@ -1300,6 +1315,33 @@ function injectIntoCartForm(wrapper, container) {
     }
   }
 
+  // Non-Plus pricing: after the main item is added, charge the option add-ons
+  // by adding the hidden $0.01 fee variant with quantity = add-on cents.
+  function pistalixAddFeeLine() {
+    var fee = capConfig.feeConfig;
+    if (!fee || fee.isPlus || !fee.feeVariantId) return;
+    var cents = window.pistalixLastAddonCents || 0;
+    if (cents <= 0) return;
+    var cartRoot = (window.Shopify && window.Shopify.routes && window.Shopify.routes.root)
+      ? window.Shopify.routes.root : '/';
+    window.pistalixAddingFee = true; // guard: don't re-intercept our own request
+    fetch(cartRoot + 'cart/add.js', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        items: [{
+          id: Number(fee.feeVariantId),
+          quantity: cents,
+          properties: { _pistalix_addon_fee: '1' }
+        }]
+      })
+    }).then(function () {
+      window.pistalixAddingFee = false;
+      // Nudge the theme to refresh its cart drawer/count.
+      document.dispatchEvent(new CustomEvent('pistalix:fee-added'));
+    }).catch(function () { window.pistalixAddingFee = false; });
+  }
+
   // Force-inject properties into cart/add fetch requests to bypass any theme serialization quirks
   if (!window.pistalixFetchIntercepted) {
     window.pistalixFetchIntercepted = true;
@@ -1308,6 +1350,10 @@ function injectIntoCartForm(wrapper, container) {
       var urlArg = arguments[0];
       var urlStr = typeof urlArg === 'string' ? urlArg : (urlArg && urlArg.url ? urlArg.url : '');
       var config = arguments[1];
+      // Skip our own fee-line request to avoid recursion / re-validation.
+      if (window.pistalixAddingFee) {
+        return originalFetch.apply(window, arguments);
+      }
       if (urlStr && urlStr.indexOf('/cart/add') !== -1) {
         if (!validateCustomOptions()) {
           return Promise.reject(new Error("Required options are missing."));
@@ -1405,7 +1451,12 @@ function injectIntoCartForm(wrapper, container) {
           }
         }
       }
+      var wasCartAdd = urlStr && urlStr.indexOf('/cart/add') !== -1;
       return originalFetch.apply(window, arguments).then(function (response) {
+        // After a successful main add, charge add-ons via the fee line (non-Plus).
+        if (wasCartAdd && response && response.ok) {
+          try { pistalixAddFeeLine(); } catch (e) { /* ignore */ }
+        }
         return response;
       });
     };
