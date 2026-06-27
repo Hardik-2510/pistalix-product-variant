@@ -28,7 +28,7 @@ import ElementEditor from "../components/ElementEditor";
 import ProductRuleBuilder from "../components/ProductRuleBuilder";
 import { useUnsavedChanges } from "../hooks/useUnsavedChanges";
 import { syncOptionSetToMetafields } from "../lib/metafields.server";
-import { getShopFeatures } from "../lib/features.server";
+import { getShopFeatures, sanitizeElementConfigForTier } from "../lib/features.server";
 // Bundled seed catalogs (see note in app.templates._index.jsx).
 import PREDEFINED_TEMPLATES from "../lib/predefinedTemplates.json";
 import PERSONALIZED_TEMPLATES from "../lib/personalizedTemplates.json";
@@ -162,7 +162,7 @@ export const action = async ({ request, params }) => {
       return data({ error: "Invalid data format received." }, { status: 400 });
     }
 
-    const { features } = await getShopFeatures(session.shop);
+    const { tier, features } = await getShopFeatures(session.shop);
     const maxSections = features.maxSectionsPerOptionSet || 1;
     if (parsedSections.length > maxSections) {
       return data({ error: `Your plan limits you to ${maxSections} section(s) per template. Please upgrade to Premium.` }, { status: 400 });
@@ -213,6 +213,8 @@ export const action = async ({ request, params }) => {
     // Clean and link configs based on new ID mappings
     for (const el of parsedElements) {
       el.newId = elIdMap[el.id];
+      // Strip premium-only config for non-premium shops (defense-in-depth).
+      el.config = sanitizeElementConfigForTier(el.config, tier);
       if (el.config) {
         if (el.config.conditionalLogic === false) el.config.conditions = [];
         if (el.config.targetOtherFields === false) el.config.pushRules = [];
@@ -673,6 +675,7 @@ export default function NewTemplate() {
                             key={section.id}
                             section={section}
                             sectionIndex={idx}
+                            currentTier={currentTier}
                             elements={elements.filter((el) => el.sectionId === section.id)}
                             onAddElement={handleAddElement}
                             onDeleteElement={handleDeleteElement}

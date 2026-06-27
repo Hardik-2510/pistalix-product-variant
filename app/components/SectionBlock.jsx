@@ -34,7 +34,7 @@ export default function SectionBlock({
   sectionIndex = 0,
   onEditElement,
   onEditStyle,
-  currentTier = "free",
+  currentTier = "basic",
 }) {
   const handleAddOption = useCallback(
     (item) => {

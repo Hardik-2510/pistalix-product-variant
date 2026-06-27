@@ -25,7 +25,7 @@ import ProductRuleBuilder from "./ProductRuleBuilder";
 import { useUnsavedChanges } from "../hooks/useUnsavedChanges";
 
 // eslint-disable-next-line react/prop-types
-export default function OptionSetBuilder({ initialData = null, currentTier = "free" }) {
+export default function OptionSetBuilder({ initialData = null, currentTier = "basic" }) {
   const navigate = useNavigate();
   const fetcher = useFetcher();
   const isSaving = fetcher.state !== "idle";

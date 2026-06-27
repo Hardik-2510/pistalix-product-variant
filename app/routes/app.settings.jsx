@@ -3,6 +3,7 @@ import { useState, useCallback, useRef } from "react";
 import { useLoaderData, useSubmit, useNavigation } from "react-router";
 import { authenticate } from "../shopify.server";
 import { getShopTier, sanitizeSettingsForTier } from "../lib/features.server";
+import PlanGate from "../components/PlanGate";
 import {
   Page,
   Card,
@@ -125,7 +126,8 @@ function TranslationRow({ english }) {
 }
 
 export async function loader({ request }) {
-  const { admin } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
+  const currentTier = await getShopTier(session.shop);
 
   try {
     const response = await admin.graphql(`
@@ -148,10 +150,10 @@ export async function loader({ request }) {
     } catch(e) {
       console.warn("Failed to parse settings JSON:", e);
     }
-    return { settings, shopId };
+    return { settings, shopId, currentTier };
   } catch (error) {
     console.error("GraphQL Error in loader:", error);
-    return { settings: {}, shopId: null };
+    return { settings: {}, shopId: null, currentTier };
   }
 }
 
@@ -211,7 +213,7 @@ export async function action({ request }) {
 }
 
 export default function Settings() {
-  const { settings, shopId } = useLoaderData();
+  const { settings, shopId, currentTier } = useLoaderData();
   const submit = useSubmit();
   const navigation = useNavigation();
   const isSaving = navigation.state === "submitting";
@@ -599,6 +601,7 @@ export default function Settings() {
                               </InlineGrid>
                             </Box>
 
+                            <PlanGate requiredTier="standard" currentTier={currentTier} featureLabel="Advanced colors">
                             <Box paddingBlockEnd="300" borderBlockEndWidth="025" borderColor="border">
                               <Box paddingBlockEnd="200" paddingBlockStart="100">
                                 <Text variant="headingXs" as="h6" tone="subdued" fontWeight="semibold">Single input</Text>
@@ -672,11 +675,13 @@ export default function Settings() {
                                 <ColorSwatchItem label="Group chevron" value={colors.groupChevron} onChange={(val) => handleColorChange("groupChevron", val)} />
                               </InlineGrid>
                             </Box>
+                            </PlanGate>
                           </BlockStack>
                         </Box>
                       </Card>
 
                       {/* Borders */}
+                      <PlanGate requiredTier="premium" currentTier={currentTier} featureLabel="Border settings">
                       <Card padding="0">
                         <Box padding="400" background="bg-surface-secondary" borderBlockEndWidth="025" borderColor="border">
                           <Text variant="headingSm" as="h2" fontWeight="semibold">Border</Text>
@@ -724,8 +729,10 @@ export default function Settings() {
                           </InlineGrid>
                         </Box>
                       </Card>
+                      </PlanGate>
 
                       {/* Typography */}
+                      <PlanGate requiredTier="premium" currentTier={currentTier} featureLabel="Typography settings">
                       <Card padding="0">
                         <Box padding="400" background="bg-surface-secondary" borderBlockEndWidth="025" borderColor="border">
                           <Text variant="headingSm" as="h2" fontWeight="semibold">Typography</Text>
@@ -790,6 +797,7 @@ export default function Settings() {
                           </InlineGrid>
                         </Box>
                       </Card>
+                      </PlanGate>
                     </BlockStack>
                   )}
 

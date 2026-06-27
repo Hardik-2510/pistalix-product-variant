@@ -229,7 +229,7 @@ export default function ElementEditor({ element, allElements = [], onChange, onB
                 </InlineStack>
               )}
 
-              {hasConditionalLogic ? (
+              {(hasConditionalLogic && currentTier === "premium") ? (
                 <>
                   <Checkbox
                     label="Conditional logic (Show this field when...)"
@@ -243,21 +243,29 @@ export default function ElementEditor({ element, allElements = [], onChange, onB
                   )}
                 </>
               ) : (
-                <Banner tone="warning" title="Pro Feature">
-                  <p>Conditional logic requires the Pro plan. <a href="/app/pricing">Upgrade now</a></p>
+                <Banner tone="warning" title="Premium Feature">
+                  <p>Conditional logic requires the Premium plan. <a href="/app/pricing">Upgrade now</a></p>
                 </Banner>
               )}
 
-              <Checkbox
-                label="Target other fields (Actions)"
-                checked={element.config?.targetOtherFields || false}
-                onChange={(val) => handleConfigChange("targetOtherFields", val)}
-              />
+              {currentTier === "premium" ? (
+                <>
+                  <Checkbox
+                    label="Target other fields (Actions)"
+                    checked={element.config?.targetOtherFields || false}
+                    onChange={(val) => handleConfigChange("targetOtherFields", val)}
+                  />
 
-              {element.config?.targetOtherFields && (
-                <Box paddingBlockStart="400">
-                  <TargetedActionsEditor element={element} allElements={allElements} onUpdate={onChange} />
-                </Box>
+                  {element.config?.targetOtherFields && (
+                    <Box paddingBlockStart="400">
+                      <TargetedActionsEditor element={element} allElements={allElements} onUpdate={onChange} />
+                    </Box>
+                  )}
+                </>
+              ) : (
+                <Banner tone="warning" title="Premium Feature">
+                  <p>Targeted actions require the Premium plan. <a href="/app/pricing">Upgrade now</a></p>
+                </Banner>
               )}
 
               {/* Allow Multiple Selections for visually grouped choices and dropdowns */}
@@ -361,9 +369,10 @@ export default function ElementEditor({ element, allElements = [], onChange, onB
                                 newChoices[index] = { ...choice, price: val };
                                 handleConfigChange("choices", newChoices);
                               }}
-                              placeholder="+ $0.00"
+                              placeholder={currentTier === "premium" ? "+ $0.00" : "🔒 Premium"}
                               autoComplete="off"
                               labelHidden
+                              disabled={currentTier !== "premium"}
                             />
                           </Box>
                           {element.type !== "Color Dropdown" && (
@@ -988,7 +997,8 @@ export default function ElementEditor({ element, allElements = [], onChange, onB
                         value={element.config?.price || ""}
                         onChange={(val) => handleConfigChange("price", val)}
                         autoComplete="off"
-                        helpText="Leave blank for no extra cost"
+                        disabled={currentTier !== "premium"}
+                        helpText={currentTier === "premium" ? "Leave blank for no extra cost" : "🔒 Option price add-ons require the Premium plan."}
                       />
                       {["Text", "Textarea"].includes(element.type) && (
                         <Box paddingBlockStart="200">
@@ -996,6 +1006,7 @@ export default function ElementEditor({ element, allElements = [], onChange, onB
                             label="Charge per character"
                             checked={element.config?.chargePerCharacter || false}
                             onChange={(val) => handleConfigChange("chargePerCharacter", val)}
+                            disabled={currentTier !== "premium"}
                           />
                         </Box>
                       )}

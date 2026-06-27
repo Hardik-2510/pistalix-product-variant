@@ -5,7 +5,7 @@ import prisma from "../db.server";
 import crypto from "crypto";
 import OptionSetBuilder from "../components/OptionSetBuilder";
 import { syncOptionSetToMetafields, clearOptionSetMetafields } from "../lib/metafields.server";
-import { getShopFeatures } from "../lib/features.server";
+import { getShopFeatures, sanitizeElementConfigForTier } from "../lib/features.server";
 
 /**
  * Loader — fetches existing option set with all elements and product rules.
@@ -65,6 +65,8 @@ export const action = async ({ request, params }) => {
       include: { sections: true, elements: true, productRules: true },
     });
 
+    const { tier } = await getShopFeatures(session.shop);
+
     const duplicated = await prisma.$transaction(async (tx) => {
       // Guarantee the Shop row exists (OptionSet.shopId FKs to Shop.shopDomain).
       await tx.shop.upsert({
@@ -115,6 +117,7 @@ export const action = async ({ request, params }) => {
                 try {
                   parsedConfig = typeof el.config === "string" ? JSON.parse(el.config) : el.config || {};
                 } catch { parsedConfig = {}; }
+                parsedConfig = sanitizeElementConfigForTier(parsedConfig, tier);
 
                 if (parsedConfig.sectionId && secIdMap[parsedConfig.sectionId]) {
                   parsedConfig.sectionId = secIdMap[parsedConfig.sectionId];
@@ -185,7 +188,7 @@ export const action = async ({ request, params }) => {
       parsedRules = JSON.parse(formData.get("productRules") || "[]");
     } catch { parsedRules = []; }
 
-    const { features } = await getShopFeatures(session.shop);
+    const { tier, features } = await getShopFeatures(session.shop);
     const maxSections = features.maxSectionsPerOptionSet || 1;
     if (parsedSections.length > maxSections) {
       return { error: `Your plan limits you to ${maxSections} section${maxSections > 1 ? 's' : ''} per option set. Please upgrade to Premium for unlimited sections.` };
@@ -221,6 +224,8 @@ export const action = async ({ request, params }) => {
 
         for (const el of parsedElements) {
           el.newId = elIdMap[el.id];
+          // Strip premium-only config for non-premium shops (defense-in-depth).
+          el.config = sanitizeElementConfigForTier(el.config, tier);
           if (el.config) {
             if (el.config.conditionalLogic === false) {
               el.config.conditions = [];

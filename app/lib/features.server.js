@@ -81,6 +81,49 @@ export async function validateOptionSetLimit(shopDomain) {
 }
 
 /**
+ * Strip premium-only element configuration for non-premium tiers.
+ *
+ * Hardens the UI gates so they can't be persisted via a crafted/bypassed
+ * request, and neutralizes stale premium config after a downgrade:
+ *   - Conditional logic        (premium only)
+ *   - Targeted actions         (premium only)
+ *   - Option-wise price add-ons (premium only)
+ *
+ * @param {object} config  Parsed element config object.
+ * @param {string} tier    "basic" | "standard" | "premium"
+ * @returns {object} sanitized config
+ */
+export function sanitizeElementConfigForTier(config, tier) {
+  if (!config || typeof config !== "object") return config;
+  if (tier === "premium") return config;
+
+  const c = { ...config };
+
+  // Conditional logic — premium only
+  delete c.conditionalLogic;
+  delete c.conditions;
+
+  // Targeted actions — premium only
+  delete c.targetOtherFields;
+  delete c.pushRules;
+
+  // Option-wise price add-ons — premium only
+  delete c.price;
+  delete c.chargePerCharacter;
+  if (Array.isArray(c.choices)) {
+    c.choices = c.choices.map((choice) => {
+      if (choice && typeof choice === "object") {
+        const { price, ...rest } = choice;
+        return rest;
+      }
+      return choice;
+    });
+  }
+
+  return c;
+}
+
+/**
  * Sanitize settings payload based on plan tier.
  * Strips locked feature data so it can't be persisted via API bypass.
  */

@@ -18,7 +18,7 @@ import "@shopify/polaris/build/esm/styles.css";
 import { useNavigate, useLoaderData, useFetcher, useRouteError, isRouteErrorResponse } from "react-router";
 import prisma from "../db.server";
 import { authenticate } from "../shopify.server";
-import { validateOptionSetLimit } from "../lib/features.server";
+import { validateOptionSetLimit, getShopFeatures, sanitizeElementConfigForTier } from "../lib/features.server";
 import process from "process";
 // Seed catalogs are imported (bundled into the build) rather than read from
 // disk — the runtime Docker image doesn't ship the app/ source tree, so
@@ -220,6 +220,8 @@ export const action = async ({ request }) => {
         create: { shopDomain: session.shop }
       });
 
+      const { tier } = await getShopFeatures(session.shop);
+
       for (const tpl of templatesToImport) {
         // Remap section and element IDs for the imported template to ensure config consistency
         const secIdMap = {};
@@ -289,6 +291,8 @@ export const action = async ({ request }) => {
                 }
               }
             }
+
+            parsedConfig = sanitizeElementConfigForTier(parsedConfig, tier);
 
             return {
               id: elIdMap[e.id],

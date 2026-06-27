@@ -73,7 +73,7 @@ const elementCategories = [
  * AddOptionMegaMenu — A multi-column popover mega-menu for adding
  * template option elements, categorized by type.
  */
-export default function AddOptionMegaMenu({ onSelect, currentTier = "free" }) {
+export default function AddOptionMegaMenu({ onSelect, currentTier = "basic" }) {
   const navigate = useNavigate();
   const [active, setActive] = useState(false);
   const toggleActive = useCallback(() => setActive((prev) => !prev), []);

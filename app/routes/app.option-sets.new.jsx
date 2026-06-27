@@ -3,7 +3,7 @@ import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import OptionSetBuilder from "../components/OptionSetBuilder";
 import { syncOptionSetToMetafields } from "../lib/metafields.server";
-import { getShopFeatures, validateOptionSetLimit } from "../lib/features.server";
+import { getShopFeatures, validateOptionSetLimit, sanitizeElementConfigForTier } from "../lib/features.server";
 // Bundled seed catalogs (see note in app.templates._index.jsx).
 import PREDEFINED_TEMPLATES from "../lib/predefinedTemplates.json";
 import PERSONALIZED_TEMPLATES from "../lib/personalizedTemplates.json";
@@ -75,7 +75,7 @@ export const action = async ({ request }) => {
       parsedSections = JSON.parse(formData.get("sections") || "[]");
     } catch { parsedSections = []; }
 
-    const { features } = await getShopFeatures(session.shop);
+    const { tier, features } = await getShopFeatures(session.shop);
     const maxSections = features.maxSectionsPerOptionSet || 1;
     if (parsedSections.length > maxSections) {
       return { error: `Your plan limits you to ${maxSections} section${maxSections > 1 ? 's' : ''} per option set. Please upgrade to Premium for unlimited sections.` };
@@ -122,6 +122,8 @@ export const action = async ({ request }) => {
 
         for (const el of parsedElements) {
           el.newId = elIdMap[el.id];
+          // Strip premium-only config for non-premium shops (defense-in-depth).
+          el.config = sanitizeElementConfigForTier(el.config, tier);
           if (el.config) {
             if (el.config.conditionalLogic === false) {
               el.config.conditions = [];
