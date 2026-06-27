@@ -144,10 +144,16 @@ Add:
 
 ```bash
 npm install          # if you haven't already
-npm run deploy       # = shopify app deploy
+npm run deploy       # = shopify app deploy --allow-updates
 ```
 This pushes `shopify.app.toml` (URLs + GDPR compliance webhooks), the **Functions**, and the
 **theme app extension**.
+
+> **Why `--allow-updates`?** Shopify CLI 4.0 removed the old `--force` flag. Non-interactive
+> shells (Git Bash/MINGW64, CI) now require you to state what changes are allowed. `--allow-updates`
+> adds and updates config + extensions without permitting deletions — it's baked into the `deploy`
+> script, so a plain `npm run deploy` works everywhere. (Use a real TTY like PowerShell/CMD if you
+> prefer interactive prompts instead.)
 
 After it completes:
 1. Find the **cart-price-override Function ID** (in the deploy output, or Partner Dashboard →

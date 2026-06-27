@@ -30,10 +30,12 @@ export default function App() {
           <Card>
             <BlockStack gap="400">
               <Text variant="headingLg" as="h1">
-                A short heading about [your app]
+                Varify Product Options Variant
               </Text>
               <Text variant="bodyMd" as="p">
-                A tagline about [your app] that describes your value proposition.
+                Break past Shopify&rsquo;s variant limits. Add unlimited custom product
+                options &mdash; text fields, file uploads, color &amp; image swatches,
+                dropdowns, and more &mdash; with add-on pricing and conditional logic.
               </Text>
               {showForm && (
                 <Form method="post" action="/auth/login" onSubmit={(e) => { e.preventDefault(); handleLogin(); }}>
@@ -54,13 +56,13 @@ export default function App() {
               )}
               <List>
                 <List.Item>
-                  <Text fontWeight="bold" as="span">Product feature</Text>. Some detail about your feature and its benefit to your customer.
+                  <Text fontWeight="bold" as="span">Unlimited custom options</Text>. Add text inputs, file uploads, color &amp; image swatches, dropdowns, and checkboxes to any product.
                 </List.Item>
                 <List.Item>
-                  <Text fontWeight="bold" as="span">Product feature</Text>. Some detail about your feature and its benefit to your customer.
+                  <Text fontWeight="bold" as="span">Reusable option sets &amp; templates</Text>. Build once and apply across products and collections, with ready-made templates to start fast.
                 </List.Item>
                 <List.Item>
-                  <Text fontWeight="bold" as="span">Product feature</Text>. Some detail about your feature and its benefit to your customer.
+                  <Text fontWeight="bold" as="span">Conditional logic &amp; add-on pricing</Text>. Show or hide options based on customer choices, and add extra costs that calculate automatically.
                 </List.Item>
               </List>
             </BlockStack>

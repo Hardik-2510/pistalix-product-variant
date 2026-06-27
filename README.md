@@ -105,3 +105,146 @@ Since this is a Remix/React-Router based application, data fetching and mutation
   - Example: Submitting the Option Set Builder form sends a `POST` request to the current route's action, which validates the JSON payload and updates the Prisma database.
 - **GraphQL / Shopify API:**
   - The app communicates with Shopify's backend using the authenticated session context (via `shopify.server.js`) to query products, collections, and manage App blocks.
+
+---
+
+## Production Deployment
+
+The app is deployed on a **single DigitalOcean Droplet** running Docker Compose, with **Caddy**
+for automatic HTTPS, **SQLite on a persistent volume**, and **DigitalOcean Spaces** for file
+uploads.
+
+- **Domain:** `apppov.pistalix.in`
+- **Storage:** DigitalOcean Spaces (`king-vid`, region `sgp1`)
+- **Estimated cost:** ~$6/mo droplet + $5/mo Spaces ≈ **$11/mo**
+
+> A copy of this guide also lives in [`DEPLOY.md`](./DEPLOY.md).
+
+### Guide 1 — DigitalOcean (server + storage)
+
+#### 1.1 Push the code to a Git remote
+```bash
+git add .
+git commit -m "Production deploy"
+git push origin main
+```
+
+#### 1.2 Confirm the Space
+- Bucket `king-vid`, region `sgp1`.
+- Space settings → **File Listing: Restricted**.
+- *(Recommended)* enable the **CDN**, and add a **Lifecycle rule** to expire
+  `varify-product-options/backups/` after 30 days.
+
+#### 1.3 Create the Droplet
+1. DO → **Create → Droplet** → Region **Singapore (SGP1)**.
+2. Image **Ubuntu 24.04 LTS**.
+3. Size **Basic → Regular → $6/mo (1 GB)** (or $4/512 MB with the swap step below).
+4. Add your **SSH key**, create, copy the **public IP**.
+
+#### 1.4 Point the domain
+DNS for `pistalix.in` → add **A record**: host `apppov` → `<droplet IP>`, TTL 300.
+Verify: `nslookup apppov.pistalix.in` returns the droplet IP. (Required before HTTPS works.)
+
+#### 1.5 Prepare the server (`ssh root@<IP>`)
+```bash
+# Swap — prevents build OOM on small droplets
+fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
+echo '/swapfile none swap sw 0 0' >> /etc/fstab
+
+# Docker + Compose + git
+apt-get update && apt-get install -y docker.io docker-compose-v2 git
+systemctl enable --now docker
+
+# Firewall
+ufw allow OpenSSH && ufw allow 80 && ufw allow 443 && ufw --force enable
+```
+
+#### 1.6 Clone & configure
+```bash
+git clone <your-repo-url> /opt/pistalix
+cd /opt/pistalix
+cp .env.example .env
+nano .env     # fill in all values (see ".env reference" below)
+```
+
+#### 1.7 Launch
+```bash
+docker compose up -d --build      # first build takes a few minutes
+docker compose logs -f app        # watch for migrate + server start
+```
+Open **https://apppov.pistalix.in** — Caddy issues the TLS cert on first request.
+
+#### 1.8 Backups
+```bash
+# Test once
+docker compose exec -T app node scripts/backup-db.mjs
+# Schedule daily (crontab -e):
+0 3 * * * cd /opt/pistalix && docker compose exec -T app node scripts/backup-db.mjs >> /var/log/pistalix-backup.log 2>&1
+```
+
+#### `.env` reference
+```
+SHOPIFY_API_KEY=07a0a225a28e52758463e6995952b30b
+SHOPIFY_API_SECRET=<Partner Dashboard → API credentials → Client secret>
+SHOPIFY_APP_URL=https://apppov.pistalix.in
+SCOPES=read_cart_transforms,read_draft_orders,read_files,write_cart_transforms,write_draft_orders,write_files,write_metaobject_definitions,write_metaobjects,write_products
+SHOPIFY_CART_PRICE_OVERRIDE_ID=<fill after `npm run deploy`, see Guide 2>
+DATABASE_URL=file:./dev.sqlite          # overridden to file:/data/prod.sqlite inside Docker
+SPACES_KEY=<your spaces key>
+SPACES_SECRET=<your spaces secret>
+SPACES_REGION=sgp1
+SPACES_ENDPOINT=https://sgp1.digitaloceanspaces.com
+SPACES_BUCKET=king-vid
+SPACES_CDN_URL=https://king-vid.sgp1.digitaloceanspaces.com
+SPACES_FOLDER=varify-product-options
+```
+
+### Guide 2 — Shopify (deploy config & publish)
+
+#### 2.1 Deploy app config, Functions & extensions (from your machine)
+```bash
+npm install
+npm run deploy        # = shopify app deploy --allow-updates
+```
+> `--allow-updates` is baked into the script so deploys work from non-interactive shells
+> (e.g. Git Bash / CI) without prompting. It adds/updates config & extensions but never deletes.
+
+This pushes `shopify.app.toml` (URLs + GDPR compliance webhooks), the cart-price-override
+**Function**, and the **theme app extension**.
+
+#### 2.2 Get the Function ID
+After deploy, find the `cart-price-override` Function ID (Partner Dashboard → app →
+Extensions, or via GraphiQL):
+```graphql
+query { shopifyFunctions(first: 25) { nodes { id title apiType } } }
+```
+Copy the `id` of the `cart_transform` function into `.env` on the droplet as
+`SHOPIFY_CART_PRICE_OVERRIDE_ID`, then `docker compose up -d`.
+
+#### 2.3 Verify config (Partner Dashboard → Configuration)
+- App URL: `https://apppov.pistalix.in`
+- Redirect URL: `https://apppov.pistalix.in/auth/callback`
+- App proxy: subpath `product-options`, prefix `apps`
+- Compliance webhooks: `https://apppov.pistalix.in/webhooks/compliance`
+
+#### 2.4 Install & smoke-test on a development store
+1. Partners → **Test your app** → install on a dev store.
+2. Confirm OAuth completes and the app loads embedded.
+3. Upload an image in an option set → confirm it lands under
+   `king-vid/varify-product-options/<shop>/` and renders.
+4. Confirm the storefront widget + cart price override work.
+
+#### 2.5 Rotate the Spaces key (security)
+DO → API → Spaces Keys → generate new → update `.env` → `docker compose up -d` → delete old key.
+
+#### 2.6 Submit to the Shopify App Store
+Partners → **Distribution → Shopify App Store → Create listing**. Required: icon, screenshots,
+description, pricing, privacy policy URL, working OAuth, compliance webhooks (implemented),
+embedded session-token auth (configured). Then **Submit for review**.
+
+### Day-2 operations
+```bash
+cd /opt/pistalix && git pull && docker compose up -d --build   # deploy new code
+docker compose logs -f app                                     # logs
+docker compose exec -T app node scripts/backup-db.mjs          # manual backup
+```
