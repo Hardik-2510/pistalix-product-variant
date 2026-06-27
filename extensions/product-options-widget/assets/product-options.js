@@ -418,11 +418,14 @@ function updateTotalPrice() {
     var group = select.closest('.cap-option-group');
     if (group && group.style.display === 'none') return;
 
-    if (select.selectedIndex >= 0) {
-      var opt = select.options[select.selectedIndex];
+    // Supports both single and multiple (<select multiple>) dropdowns.
+    var selectedOpts = (select.selectedOptions && select.selectedOptions.length)
+      ? select.selectedOptions
+      : (select.selectedIndex >= 0 ? [select.options[select.selectedIndex]] : []);
+    for (var si = 0; si < selectedOpts.length; si++) {
+      var opt = selectedOpts[si];
       if (opt && opt.value !== '') {
-        var p = parseInt(opt.getAttribute('data-price') || '0', 10);
-        totalAddonCents += p;
+        totalAddonCents += parseInt(opt.getAttribute('data-price') || '0', 10);
       }
     }
   });
@@ -1988,16 +1991,23 @@ function renderDropdown(element) {
   var config = parseConfig(element.config);
   var choices = getChoices(config);
 
-
+  var allowMultiple = !!config.allowMultiple;
 
   var select = document.createElement('select');
-  select.name = propName(element.label);
   select.className = 'cap-select';
 
-  var defaultOpt = document.createElement('option');
-  defaultOpt.value = '';
-  defaultOpt.textContent = '-- Select ' + element.label + ' --';
-  select.appendChild(defaultOpt);
+  if (allowMultiple) {
+    // Native multi-select: lets the customer pick more than one option.
+    select.multiple = true;
+    select.size = Math.min(Math.max(choices.length, 3), 6);
+    select.style.minHeight = '96px';
+  } else {
+    select.name = propName(element.label);
+    var defaultOpt = document.createElement('option');
+    defaultOpt.value = '';
+    defaultOpt.textContent = '-- Select ' + element.label + ' --';
+    select.appendChild(defaultOpt);
+  }
 
   choices.forEach(function (opt) {
     var option = document.createElement('option');
@@ -2008,8 +2018,30 @@ function renderDropdown(element) {
     select.appendChild(option);
   });
 
-  select.addEventListener('change', updateTotalPrice);
-  group.appendChild(select);
+  if (allowMultiple) {
+    // A multi-select's .value only returns the FIRST option, which breaks cart
+    // serialization and required-validation. Mirror the joined selected values
+    // into a hidden input (appended first so validation/serialization read it).
+    var hiddenInput = document.createElement('input');
+    hiddenInput.type = 'hidden';
+    hiddenInput.name = propName(element.label);
+    hiddenInput.value = '';
+    var syncHidden = function () {
+      var vals = [];
+      for (var i = 0; i < select.selectedOptions.length; i++) {
+        if (select.selectedOptions[i].value !== '') vals.push(select.selectedOptions[i].value);
+      }
+      hiddenInput.value = vals.join(', ');
+    };
+    select.addEventListener('change', function () { syncHidden(); updateTotalPrice(); });
+    syncHidden();
+    group.appendChild(hiddenInput);
+    group.appendChild(select);
+  } else {
+    select.addEventListener('change', updateTotalPrice);
+    group.appendChild(select);
+  }
+
   group.appendChild(createErrorMsg());
   return group;
 }
