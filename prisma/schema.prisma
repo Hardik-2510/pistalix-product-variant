@@ -10,7 +10,9 @@ generator client {
 // See https://www.prisma.io/docs/orm/reference/prisma-schema-reference#string for more information
 datasource db {
   provider = "sqlite"
-  url      = "file:dev.sqlite"
+  // Local dev falls back to ./prisma/dev.sqlite; in production DATABASE_URL
+  // points at the persistent volume, e.g. file:/data/prod.sqlite
+  url      = env("DATABASE_URL")
 }
 
 model Session {

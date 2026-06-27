@@ -4,8 +4,8 @@ import { Button, InlineStack, Box, Thumbnail, Spinner, Text } from "@shopify/pol
 /**
  * Universal image upload component.
  *
- * Uploads the selected file to /api/upload which pushes it to the
- * Shopify Files API (stagedUploadsCreate → fileCreate → poll READY).
+ * Uploads the selected file to /api/upload which stores it in
+ * DigitalOcean Spaces and returns the public CDN URL.
  * Calls onChange(cdnUrl) on success — no Base64 strings anywhere.
  */
 export default function ImageUploadInput({ value, onChange }) {
@@ -56,7 +56,7 @@ export default function ImageUploadInput({ value, onChange }) {
         /* ── Loading state ── */
         <InlineStack gap="200" blockAlign="center">
           <Spinner accessibilityLabel="Uploading image" size="small" />
-          <Text as="span" tone="subdued" variant="bodySm">Uploading to Shopify CDN…</Text>
+          <Text as="span" tone="subdued" variant="bodySm">Uploading…</Text>
         </InlineStack>
       ) : value ? (
         /* ── Image preview ── */

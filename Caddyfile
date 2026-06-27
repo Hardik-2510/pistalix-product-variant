@@ -1,0 +1,6 @@
+# Caddy automatically provisions and renews a Let's Encrypt TLS cert
+# for this domain — no certbot, no manual renewals.
+apppov.pistalix.in {
+    encode gzip zstd
+    reverse_proxy app:3000
+}
