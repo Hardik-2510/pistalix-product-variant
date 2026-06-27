@@ -131,7 +131,7 @@ async function createFeeProduct(admin) {
       variants: [
         {
           id: variantGid,
-          price: "0.01",
+          price: "0.00",
           taxable: true,
           inventoryItem: { tracked: false, requiresShipping: false },
         },
@@ -164,9 +164,10 @@ async function createFeeProduct(admin) {
     console.warn("Online Store publication not found — fee product may not be buyable.");
   }
 
-  // Storefront /cart/add needs the NUMERIC variant id.
+  // The cart-transform `expand` operation needs the variant GID; the storefront
+  // passes it as the `_fee_variant_id` line attribute.
   const numericVariantId = variantGid.split("/").pop();
-  return { productGid, variantGid, feeVariantId: numericVariantId };
+  return { productGid, feeVariantGid: variantGid, feeVariantId: numericVariantId };
 }
 
 /**
@@ -187,25 +188,14 @@ export async function ensureFeeConfig(admin) {
 
     const existing = await readFeeConfig(admin);
 
-    // Plus shops use the cart transform — no fee product needed.
-    if (isPlus) {
-      if (!existing || existing.isPlus !== true) {
-        await writeFeeConfig(admin, shopGid, { isPlus: true });
-      }
-      return { isPlus: true };
+    // The `expand` operation works on ALL plans, so every shop gets a fee
+    // product. Reuse it if already provisioned (idempotent).
+    if (existing && existing.feeVariantGid) {
+      return existing;
     }
 
-    // Non-Plus: reuse the existing fee variant if we already created one.
-    if (existing && existing.feeVariantId) {
-      if (existing.isPlus !== false) {
-        await writeFeeConfig(admin, shopGid, { ...existing, isPlus: false });
-      }
-      return { isPlus: false, feeVariantId: existing.feeVariantId };
-    }
-
-    // Otherwise create the fee product and persist the config.
-    const { feeVariantId } = await createFeeProduct(admin);
-    const config = { isPlus: false, feeVariantId };
+    const { feeVariantId, feeVariantGid } = await createFeeProduct(admin);
+    const config = { isPlus, feeVariantId, feeVariantGid };
     await writeFeeConfig(admin, shopGid, config);
     return config;
   } catch (err) {

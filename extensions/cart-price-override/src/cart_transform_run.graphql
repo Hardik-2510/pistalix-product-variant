@@ -2,14 +2,15 @@ query CartTransformRunInput {
   cart {
     lines {
       id
-      quantity
-      finalPrice: attribute(key: "_final_price") {
+      addonPrice: attribute(key: "_addon_price") {
         value
       }
-      cost {
-        amountPerQuantity {
-          amount
-          currencyCode
+      feeVariantId: attribute(key: "_fee_variant_id") {
+        value
+      }
+      merchandise {
+        ... on ProductVariant {
+          id
         }
       }
     }

@@ -1,4 +1,4 @@
-// @ts-check - trigger rebuild
+// @ts-check
 
 /**
  * @typedef {import("../generated/api").CartTransformRunInput} RunInput
@@ -12,63 +12,62 @@ const NO_CHANGES = {
   operations: [],
 };
 
-const zeroDecimalCurrencies = new Set([
-  'BIF', 'CLP', 'DJF', 'GNF', 'JPY', 'KMF', 'KRW', 'LAK',
-  'PYG', 'RWF', 'UGX', 'VND', 'VUV', 'XAF', 'XOF', 'XPF'
-]);
-
-
 /**
+ * Apply option add-on pricing using the `lineExpand` (bundle) operation.
+ *
+ * `lineUpdate` (direct price override) is restricted to Shopify Plus, so on
+ * standard plans it errors at checkout. `lineExpand` works on ALL plans: we
+ * expand the original cart line into a bundle of two components —
+ *   1. the original product (keeps its normal price), and
+ *   2. a hidden "fee" variant whose price is overridden to the add-on amount.
+ * The line then shows the combined price in the cart.
+ *
+ * The storefront passes two line attributes (computed in product-options.js):
+ *   _addon_price     — the add-on amount per unit, already formatted in the
+ *                      shop's currency (avoids re-deriving it from base price)
+ *   _fee_variant_id  — the GID of the hidden fee variant to use as the component
+ *
  * @param {RunInput} input
  * @returns {FunctionRunResult}
  */
 export function cartTransformRun(input) {
-  // console.error("Pistalix Backend Trace [4] - Incoming Cart Transform Input:", JSON.stringify(input.cart.lines));
-  
   const operations = [];
 
   for (const line of input.cart.lines) {
-    let customPrice = null;
+    const addonRaw = line.addonPrice && line.addonPrice.value ? line.addonPrice.value.trim() : null;
+    const feeVariantId = line.feeVariantId && line.feeVariantId.value ? line.feeVariantId.value.trim() : null;
+    const originalVariantId = line.merchandise && line.merchandise.id ? line.merchandise.id : null;
 
-    // Access the aliased `finalPrice` property defined in your run.graphql
-    // The storefront JS always sends this as a dollar float string e.g. "35.00"
-    if (line.finalPrice && line.finalPrice.value) {
-      const rawValue = line.finalPrice.value.trim();
-      const floatVal = parseFloat(rawValue);
+    if (!addonRaw || !feeVariantId || !originalVariantId) continue;
 
-      if (!isNaN(floatVal) && floatVal > 0) {
-        // The storefront JS (product-options.js line 522) always formats as:
-        //   (finalPriceCents / 100).toFixed(2)  →  e.g. "35.00"
-        // So it is always a dollar amount. No cents conversion needed.
-        customPrice = floatVal;
-        // console.error("Pistalix Backend Trace [5] - Detected customPrice for line", line.id, ":", customPrice);
-      }
-    }
-
-    // If no custom price in properties, skip
-    if (customPrice === null || customPrice <= 0) continue;
-
-    const currencyCode = line.cost?.amountPerQuantity?.currencyCode || 'USD';
-    const isZeroDecimal = zeroDecimalCurrencies.has(currencyCode);
-
-    const amountStr = String(customPrice.toFixed(isZeroDecimal ? 0 : 2));
-
-    // console.error("Pistalix Backend Trace [5b] - Setting price to:", amountStr, "for line", line.id);
+    const addon = parseFloat(addonRaw);
+    if (isNaN(addon) || !(addon > 0)) continue;
 
     operations.push({
-      lineUpdate: {
+      lineExpand: {
         cartLineId: line.id,
-        price: {
-          adjustment: {
-            fixedPricePerUnit: {
-              amount: amountStr
-            }
-          }
-        }
-      }
+        expandedCartItems: [
+          // Original product — keep its normal price (no adjustment).
+          {
+            merchandiseId: originalVariantId,
+            quantity: 1,
+          },
+          // Hidden fee variant — priced to the add-on amount.
+          {
+            merchandiseId: feeVariantId,
+            quantity: 1,
+            price: {
+              adjustment: {
+                fixedPricePerUnit: {
+                  amount: addonRaw,
+                },
+              },
+            },
+          },
+        ],
+      },
     });
   }
 
-  // console.error("Pistalix Backend Trace [6] - Outgoing Operations:", JSON.stringify(operations));
   return operations.length > 0 ? { operations } : NO_CHANGES;
 }

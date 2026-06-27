@@ -523,9 +523,17 @@ function updateTotalPrice() {
     ensureHiddenInput('properties[_base_price]', formattedBase);
     ensureHiddenInput('properties[_final_price]', formattedFinal);
     ensureHiddenInput('properties[_price_adjustments]', JSON.stringify({ totalAddon: formattedAddon }));
+    // The cart-transform Function expands the line into [product + fee variant].
+    // It needs (a) the exact add-on amount and (b) the fee variant GID, both
+    // passed as hidden line attributes.
+    var feeVariantGid = (capConfig.feeConfig && capConfig.feeConfig.feeVariantGid) ? capConfig.feeConfig.feeVariantGid : '';
+    if (feeVariantGid) {
+      ensureHiddenInput('properties[_addon_price]', formattedAddon);
+      ensureHiddenInput('properties[_fee_variant_id]', feeVariantGid);
+    }
   } else if (wrapper) {
     // If no addons, remove the inputs so cart transform ignores this line
-    var fields = wrapper.querySelectorAll('input[name="properties[_base_price]"], input[name="properties[_final_price]"], input[name="properties[_price_adjustments]"]');
+    var fields = wrapper.querySelectorAll('input[name="properties[_base_price]"], input[name="properties[_final_price]"], input[name="properties[_price_adjustments]"], input[name="properties[_addon_price]"], input[name="properties[_fee_variant_id]"]');
     fields.forEach(function (f) { f.remove(); });
   }
 
@@ -1315,33 +1323,6 @@ function injectIntoCartForm(wrapper, container) {
     }
   }
 
-  // Non-Plus pricing: after the main item is added, charge the option add-ons
-  // by adding the hidden $0.01 fee variant with quantity = add-on cents.
-  function pistalixAddFeeLine() {
-    var fee = capConfig.feeConfig;
-    if (!fee || fee.isPlus || !fee.feeVariantId) return;
-    var cents = window.pistalixLastAddonCents || 0;
-    if (cents <= 0) return;
-    var cartRoot = (window.Shopify && window.Shopify.routes && window.Shopify.routes.root)
-      ? window.Shopify.routes.root : '/';
-    window.pistalixAddingFee = true; // guard: don't re-intercept our own request
-    fetch(cartRoot + 'cart/add.js', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        items: [{
-          id: Number(fee.feeVariantId),
-          quantity: cents,
-          properties: { _pistalix_addon_fee: '1' }
-        }]
-      })
-    }).then(function () {
-      window.pistalixAddingFee = false;
-      // Nudge the theme to refresh its cart drawer/count.
-      document.dispatchEvent(new CustomEvent('pistalix:fee-added'));
-    }).catch(function () { window.pistalixAddingFee = false; });
-  }
-
   // Force-inject properties into cart/add fetch requests to bypass any theme serialization quirks
   if (!window.pistalixFetchIntercepted) {
     window.pistalixFetchIntercepted = true;
@@ -1350,10 +1331,6 @@ function injectIntoCartForm(wrapper, container) {
       var urlArg = arguments[0];
       var urlStr = typeof urlArg === 'string' ? urlArg : (urlArg && urlArg.url ? urlArg.url : '');
       var config = arguments[1];
-      // Skip our own fee-line request to avoid recursion / re-validation.
-      if (window.pistalixAddingFee) {
-        return originalFetch.apply(window, arguments);
-      }
       if (urlStr && urlStr.indexOf('/cart/add') !== -1) {
         if (!validateCustomOptions()) {
           return Promise.reject(new Error("Required options are missing."));
@@ -1451,12 +1428,7 @@ function injectIntoCartForm(wrapper, container) {
           }
         }
       }
-      var wasCartAdd = urlStr && urlStr.indexOf('/cart/add') !== -1;
       return originalFetch.apply(window, arguments).then(function (response) {
-        // After a successful main add, charge add-ons via the fee line (non-Plus).
-        if (wasCartAdd && response && response.ok) {
-          try { pistalixAddFeeLine(); } catch (e) { /* ignore */ }
-        }
         return response;
       });
     };
