@@ -2,6 +2,7 @@
 import { useState, useCallback, useRef } from "react";
 import { useLoaderData, useSubmit, useNavigation } from "react-router";
 import { authenticate } from "../shopify.server";
+import { getShopTier, sanitizeSettingsForTier } from "../lib/features.server";
 import {
   Page,
   Card,
@@ -155,12 +156,23 @@ export async function loader({ request }) {
 }
 
 export async function action({ request }) {
-  const { admin } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const formData = await request.formData();
   const payload = formData.get("payload");
   const ownerId = formData.get("shopId");
   if (!payload || !ownerId) return { success: false };
-  
+
+  // Enforce plan tier server-side: strip any locked (premium-only) settings so
+  // they can't be persisted by a crafted request bypassing the UI.
+  let sanitizedPayload;
+  try {
+    const parsed = JSON.parse(payload);
+    const tier = await getShopTier(session.shop);
+    sanitizedPayload = JSON.stringify(sanitizeSettingsForTier(parsed, tier));
+  } catch {
+    return { success: false, error: "Invalid settings payload." };
+  }
+
   try {
     await admin.graphql(`
       #graphql
@@ -184,7 +196,7 @@ export async function action({ request }) {
             namespace: "pistalix",
             key: "settings",
             type: "json",
-            value: payload,
+            value: sanitizedPayload,
             ownerId: ownerId
           }
         ]

@@ -30,48 +30,91 @@ const SolidCheckCircleIcon = () => (
   </svg>
 );
 
-export async function loader({ request }) {
-  const { admin } = await authenticate.admin(request);
-  // eslint-disable-next-line no-undef
-  const functionId = process.env.SHOPIFY_CART_PRICE_OVERRIDE_ID;
+/**
+ * Ensures the cart-transform Function is activated for this shop.
+ *
+ * The Function ID is auto-discovered from the deployed Functions (no env var
+ * required). An optional SHOPIFY_CART_PRICE_OVERRIDE_ID env var can still pin
+ * a specific ID. Returns true if a cartTransform is active, false otherwise.
+ */
+async function ensureCartTransformActivated(admin) {
+  try {
+    // 1. Resolve the cart_transform Function ID.
+    // eslint-disable-next-line no-undef
+    let functionId = process.env.SHOPIFY_CART_PRICE_OVERRIDE_ID || null;
 
-  if (functionId) {
-    try {
-      const existingRes = await admin.graphql(`
+    if (!functionId) {
+      const fnRes = await admin.graphql(`
         query {
-          cartTransforms(first: 10) {
-            nodes { id functionId }
+          shopifyFunctions(first: 50) {
+            nodes { id title apiType }
           }
         }
       `);
-      const existingData = await existingRes.json();
-      const exists = existingData.data?.cartTransforms?.nodes?.some(n => n.functionId === functionId);
+      const fnData = await fnRes.json();
+      const fn = fnData?.data?.shopifyFunctions?.nodes?.find(
+        (n) => n.apiType === "cart_transform"
+      );
+      functionId = fn?.id || null;
+    }
 
-      if (!exists) {
-        const response = await admin.graphql(`
+    if (!functionId) {
+      console.warn(
+        "No cart_transform Function found. Deploy it with `npm run deploy` (--allow-updates)."
+      );
+      return false;
+    }
+
+    // 2. Activate it once per shop (idempotent).
+    const existingRes = await admin.graphql(`
+      query {
+        cartTransforms(first: 10) {
+          nodes { id functionId }
+        }
+      }
+    `);
+    const existingData = await existingRes.json();
+    const exists = existingData?.data?.cartTransforms?.nodes?.some(
+      (n) => n.functionId === functionId
+    );
+
+    if (!exists) {
+      const response = await admin.graphql(
+        `
           mutation cartTransformCreate($functionId: String!) {
             cartTransformCreate(functionId: $functionId) {
               cartTransform { id }
               userErrors { field message }
             }
           }
-        `, { variables: { functionId } });
-        const data = await response.json();
-        console.log("Cart Transform Activation:", JSON.stringify(data));
+        `,
+        { variables: { functionId } }
+      );
+      const data = await response.json();
+      const errs = data?.data?.cartTransformCreate?.userErrors;
+      if (errs?.length) {
+        console.error("cartTransformCreate userErrors:", JSON.stringify(errs));
+        return false;
       }
-    } catch (err) {
-      console.error("Failed to activate Cart Transform:", err);
+      console.log("Cart Transform activated:", JSON.stringify(data?.data?.cartTransformCreate?.cartTransform));
     }
-  }
 
+    return true;
+  } catch (err) {
+    console.error("Failed to activate Cart Transform:", err);
+    return false;
+  }
+}
+
+export async function loader({ request }) {
+  const { admin } = await authenticate.admin(request);
+
+  const activated = await ensureCartTransformActivated(admin);
   const optionSetsCount = await prisma.optionSet.count();
 
-  return { 
-    activated: !!functionId,
-    // eslint-disable-next-line no-undef
-    envKeys: Object.keys(process.env).filter(k => k.includes('SHOPIFY')),
-    functionId,
-    optionSetsCount
+  return {
+    activated,
+    optionSetsCount,
   };
 }
 

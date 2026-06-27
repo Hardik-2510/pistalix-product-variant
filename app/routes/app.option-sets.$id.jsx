@@ -66,6 +66,12 @@ export const action = async ({ request, params }) => {
     });
 
     const duplicated = await prisma.$transaction(async (tx) => {
+      // Guarantee the Shop row exists (OptionSet.shopId FKs to Shop.shopDomain).
+      await tx.shop.upsert({
+        where: { shopDomain: session.shop },
+        update: {},
+        create: { shopDomain: session.shop },
+      });
       const newSet = await tx.optionSet.create({
         data: {
           shopId: session.shop,

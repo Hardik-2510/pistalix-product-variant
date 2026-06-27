@@ -88,9 +88,35 @@ export async function switchPlan(admin, tier, interval, shop) {
   if (!plan) throw new Error("Invalid plan tier");
 
   if (tier === "basic") {
-    // If downgrading to free (basic), Shopify doesn't need billing approval.
-    // We would cancel the existing active subscription via API.
-    return null; 
+    // Downgrading to free: cancel any active paid subscription on Shopify,
+    // then drop the shop to the basic tier locally.
+    const activeRes = await admin.graphql(`
+      #graphql
+      query { currentAppInstallation { activeSubscriptions { id } } }
+    `);
+    const activeData = await activeRes.json();
+    const subs = activeData?.data?.currentAppInstallation?.activeSubscriptions || [];
+
+    for (const sub of subs) {
+      const cancelRes = await admin.graphql(
+        `#graphql
+        mutation AppSubscriptionCancel($id: ID!) {
+          appSubscriptionCancel(id: $id) {
+            appSubscription { id status }
+            userErrors { field message }
+          }
+        }`,
+        { variables: { id: sub.id } }
+      );
+      const cancelData = await cancelRes.json();
+      const errs = cancelData?.data?.appSubscriptionCancel?.userErrors;
+      if (errs?.length) {
+        console.error("appSubscriptionCancel userErrors:", JSON.stringify(errs));
+      }
+    }
+
+    await updateShopToTier(shop, "basic", null, null, null);
+    return null;
   }
 
   // Calculate price (e.g. 20% discount for yearly)
@@ -134,7 +160,9 @@ export async function switchPlan(admin, tier, interval, shop) {
     {
       variables: {
         returnUrl,
-        test: true // Set to false in production
+        // Live charges by default. Set SHOPIFY_BILLING_TEST=true on a dev store
+        // to create test subscriptions that don't charge real money.
+        test: process.env.SHOPIFY_BILLING_TEST === "true",
       }
     }
   );
@@ -197,9 +225,10 @@ export async function syncSubscriptionStatus(admin, shopDomain) {
     }
   }
 
-  // Extract billing interval from line items (assumes at least one line item)
+  // Extract billing interval from line items. The API returns a Shopify enum
+  // (EVERY_30_DAYS / ANNUAL); map it back to our 'monthly'/'yearly' values.
   const intervalRaw = bestSub.lineItems?.[0]?.plan?.appRecurringPricingDetails?.interval;
-  const interval = intervalRaw ? getInterval(intervalRaw) : null;
+  const interval = intervalRaw === "ANNUAL" ? "yearly" : intervalRaw ? "monthly" : null;
 
   await updateShopToTier(
     shopDomain,

@@ -6,15 +6,15 @@ import { PLANS, meetsMinimumTier } from "./billing.server";
  * Get the current shop's plan tier. Returns "basic" if not found.
  */
 export async function getShopTier(shopDomain) {
-  // Developer Override: automatically unlock all premium features for internal dev stores
+  // Developer Override: unlock premium ONLY for an explicit allowlist of internal
+  // stores, or when FORCE_PREMIUM is explicitly set. Must NOT depend on NODE_ENV —
+  // otherwise a misconfigured production container would give every shop premium.
   const DEVELOPER_STORES = [
     "varify-pov.myshopify.com",
-    "varify-pov.myshopify.com"
   ];
   if (
     DEVELOPER_STORES.includes(shopDomain) ||
-    process.env.FORCE_PREMIUM === "true" ||
-    process.env.NODE_ENV === "development"
+    process.env.FORCE_PREMIUM === "true"
   ) {
     return "premium";
   }

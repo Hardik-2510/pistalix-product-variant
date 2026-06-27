@@ -1,21 +1,34 @@
 // Removed unused json import
 
-import { unauthenticated } from "../shopify.server";
+import { authenticate } from "../shopify.server";
 import { getMatchedOptionSetForProduct } from "../lib/matching.server";
 
 export const loader = async ({ request }) => {
   const url = new URL(request.url);
   const productId = url.searchParams.get("productId");
-  const shop = url.searchParams.get("shop");
 
-  if (!productId || !shop) {
+  if (!productId) {
     return Response.json({ found: false, template: null }, { headers: corsHeaders() });
+  }
+
+  // Verify this is a genuine Shopify app-proxy request (HMAC-signed) and take
+  // the shop from the verified session — never trust the `shop` query param.
+  let admin, shop;
+  try {
+    const proxy = await authenticate.public.appProxy(request);
+    admin = proxy.admin;
+    shop = proxy.session?.shop;
+  } catch {
+    return Response.json({ found: false, template: null }, { status: 401, headers: corsHeaders() });
+  }
+
+  if (!admin || !shop) {
+    return Response.json({ found: false, template: null }, { status: 401, headers: corsHeaders() });
   }
 
   const productGid = `gid://shopify/Product/${productId}`;
 
   try {
-    const { admin } = await unauthenticated.admin(shop);
     const matchedOptionSet = await getMatchedOptionSetForProduct(productGid, shop, admin);
 
     if (matchedOptionSet) {
